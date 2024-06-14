@@ -118,7 +118,7 @@ linters-settings:
     disabled-checks:
       - ifElseChain
   goimports:
-    local: "blockchain"
+    local-prefixes: "blockchain"
   golint:
     min-confidence: 0.8
   gofmt:
