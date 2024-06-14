@@ -4,6 +4,7 @@
 package inscriptions
 
 import (
+	"blockchain/bitcoin/ord/runes"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/btcsuite/btcd/txscript"
 
-	"blockchain/bitcoin/runes"
 	"blockchain/internal/reverse"
 	"blockchain/internal/sequencereader"
 )

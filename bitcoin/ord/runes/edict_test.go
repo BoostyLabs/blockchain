@@ -4,20 +4,20 @@
 package runes_test
 
 import (
+	runes2 "blockchain/bitcoin/ord/runes"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"blockchain/bitcoin/runes"
 	"blockchain/internal/sequencereader"
 )
 
 func TestEdicts(t *testing.T) {
 	t.Run("ParseEdictsFromIntSeq (single)", func(t *testing.T) {
-		edicts := []runes.Edict{
+		edicts := []runes2.Edict{
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 2585359,
 					TxID:  84,
 				},
@@ -28,16 +28,16 @@ func TestEdicts(t *testing.T) {
 		payload := sequencereader.New(
 			[]*big.Int{big.NewInt(2585359), big.NewInt(84), big.NewInt(1879), big.NewInt(1)},
 		)
-		parsedEdicts, err := runes.ParseEdictsFromIntSeq(payload)
+		parsedEdicts, err := runes2.ParseEdictsFromIntSeq(payload)
 		require.NoError(t, err)
 		require.Len(t, parsedEdicts, 1)
 		require.Equal(t, edicts, parsedEdicts)
 	})
 
 	t.Run("ParseEdictsFromIntSeq (many)", func(t *testing.T) {
-		edicts := []runes.Edict{
+		edicts := []runes2.Edict{
 			{ // base edict.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 2585359,
 					TxID:  84,
 				},
@@ -45,7 +45,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{ // 0 blocks delta, 16 tx delta.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 2585359,
 					TxID:  100,
 				},
@@ -53,7 +53,7 @@ func TestEdicts(t *testing.T) {
 				Output: 2,
 			},
 			{ // 0 blocks delta, 0 tx delta.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 2585359,
 					TxID:  100,
 				},
@@ -61,7 +61,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{ // 1085 blocks delta, 12 tx.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 2586444,
 					TxID:  12,
 				},
@@ -77,7 +77,7 @@ func TestEdicts(t *testing.T) {
 				big.NewInt(1085), big.NewInt(12), big.NewInt(10052), big.NewInt(4),
 			},
 		)
-		parsedEdicts, err := runes.ParseEdictsFromIntSeq(payload)
+		parsedEdicts, err := runes2.ParseEdictsFromIntSeq(payload)
 		require.NoError(t, err)
 		require.Len(t, parsedEdicts, 4)
 		require.Equal(t, edicts, parsedEdicts)
@@ -87,14 +87,14 @@ func TestEdicts(t *testing.T) {
 		payload := sequencereader.New(
 			[]*big.Int{big.NewInt(2585359), big.NewInt(84), big.NewInt(1879), big.NewInt(1), big.NewInt(0)},
 		)
-		_, err := runes.ParseEdictsFromIntSeq(payload)
+		_, err := runes2.ParseEdictsFromIntSeq(payload)
 		require.Error(t, err)
-		require.ErrorIs(t, err, runes.ErrCenotaph)
+		require.ErrorIs(t, err, runes2.ErrCenotaph)
 	})
 
 	t.Run("EdictsToIntSeq", func(t *testing.T) {
-		edict := runes.Edict{
-			RuneID: runes.RuneID{
+		edict := runes2.Edict{
+			RuneID: runes2.RuneID{
 				Block: 12,
 				TxID:  2,
 			},
@@ -106,9 +106,9 @@ func TestEdicts(t *testing.T) {
 	})
 
 	t.Run("SortEdicts", func(t *testing.T) {
-		edicts := []runes.Edict{
+		edicts := []runes2.Edict{
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 12,
 					TxID:  2,
 				},
@@ -116,7 +116,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  13,
 				},
@@ -124,7 +124,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  12,
 				},
@@ -132,7 +132,7 @@ func TestEdicts(t *testing.T) {
 				Output: 4,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 13,
 					TxID:  45,
 				},
@@ -141,9 +141,9 @@ func TestEdicts(t *testing.T) {
 			},
 		}
 
-		sortedEdicts := []runes.Edict{
+		sortedEdicts := []runes2.Edict{
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  12,
 				},
@@ -151,7 +151,7 @@ func TestEdicts(t *testing.T) {
 				Output: 4,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  13,
 				},
@@ -159,7 +159,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 12,
 					TxID:  2,
 				},
@@ -167,7 +167,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 13,
 					TxID:  45,
 				},
@@ -176,14 +176,14 @@ func TestEdicts(t *testing.T) {
 			},
 		}
 
-		runes.SortEdicts(edicts)
+		runes2.SortEdicts(edicts)
 		require.Equal(t, sortedEdicts, edicts)
 	})
 
 	t.Run("SortEdicts", func(t *testing.T) {
-		sortedEdicts := []runes.Edict{
+		sortedEdicts := []runes2.Edict{
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  12,
 				},
@@ -191,7 +191,7 @@ func TestEdicts(t *testing.T) {
 				Output: 4,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  13,
 				},
@@ -199,7 +199,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 12,
 					TxID:  2,
 				},
@@ -207,7 +207,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 13,
 					TxID:  45,
 				},
@@ -216,9 +216,9 @@ func TestEdicts(t *testing.T) {
 			},
 		}
 
-		deltaEdicts := []runes.Edict{
+		deltaEdicts := []runes2.Edict{
 			{ // first edict.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  12,
 				},
@@ -226,7 +226,7 @@ func TestEdicts(t *testing.T) {
 				Output: 4,
 			},
 			{ // 0 block delta, 1 tx delta.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 0,
 					TxID:  1,
 				},
@@ -234,7 +234,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{ // 3 block delta, no delta for tx.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 3,
 					TxID:  2,
 				},
@@ -242,7 +242,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{ // 1 block delta, no delta for tx.
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 1,
 					TxID:  45,
 				},
@@ -251,13 +251,13 @@ func TestEdicts(t *testing.T) {
 			},
 		}
 
-		require.Equal(t, deltaEdicts, runes.UseDelta(sortedEdicts))
+		require.Equal(t, deltaEdicts, runes2.UseDelta(sortedEdicts))
 	})
 
 	t.Run("EdictsToIntSeq", func(t *testing.T) {
-		edicts := []runes.Edict{
+		edicts := []runes2.Edict{
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 12,
 					TxID:  2,
 				},
@@ -265,7 +265,7 @@ func TestEdicts(t *testing.T) {
 				Output: 1,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  13,
 				},
@@ -273,7 +273,7 @@ func TestEdicts(t *testing.T) {
 				Output: 3,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 9,
 					TxID:  12,
 				},
@@ -281,7 +281,7 @@ func TestEdicts(t *testing.T) {
 				Output: 4,
 			},
 			{
-				RuneID: runes.RuneID{
+				RuneID: runes2.RuneID{
 					Block: 13,
 					TxID:  45,
 				},
@@ -297,6 +297,6 @@ func TestEdicts(t *testing.T) {
 			big.NewInt(1), big.NewInt(45), big.NewInt(100), big.NewInt(3),
 		}
 
-		require.Equal(t, seq, runes.EdictsToIntSeq(edicts))
+		require.Equal(t, seq, runes2.EdictsToIntSeq(edicts))
 	})
 }

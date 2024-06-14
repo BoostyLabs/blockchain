@@ -4,22 +4,21 @@
 package runes_test
 
 import (
+	runes2 "blockchain/bitcoin/ord/runes"
 	"encoding/hex"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"blockchain/bitcoin/runes"
 )
 
 func TestRunestone(t *testing.T) {
 	t.Run("parse script data", func(t *testing.T) {
 		t.Run("edict only", func(t *testing.T) {
-			runestone := &runes.Runestone{
-				Edicts: []runes.Edict{
+			runestone := &runes2.Runestone{
+				Edicts: []runes2.Edict{
 					{
-						RuneID: runes.RuneID{
+						RuneID: runes2.RuneID{
 							Block: 2585359,
 							TxID:  84,
 						},
@@ -32,14 +31,14 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d09008fe69d0154d70e01")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
 
 		t.Run("mint only", func(t *testing.T) {
-			runestone := &runes.Runestone{
-				Mint: &runes.RuneID{
+			runestone := &runes2.Runestone{
+				Mint: &runes2.RuneID{
 					Block: 2585189,
 					TxID:  204,
 				},
@@ -48,15 +47,15 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d0814e5e49d0114cc01")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
 
 		t.Run("mint with pointer", func(t *testing.T) {
 			pointer := uint32(1)
-			runestone := &runes.Runestone{
-				Mint: &runes.RuneID{
+			runestone := &runes2.Runestone{
+				Mint: &runes2.RuneID{
 					Block: 2584240,
 					TxID:  130,
 				},
@@ -66,21 +65,21 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d0a14b0dd9d011482011601")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
 
 		t.Run("pointer only", func(t *testing.T) {
 			pointer := uint32(14)
-			runestone := &runes.Runestone{
+			runestone := &runes2.Runestone{
 				Pointer: &pointer,
 			}
 
 			data, err := hex.DecodeString("6a5d02160e")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
@@ -89,11 +88,11 @@ func TestRunestone(t *testing.T) {
 			divisibility := byte(10)
 			spasers := uint32(0)
 			symbol := rune(77)
-			rune_, err := runes.NewRuneFromNumber(big.NewInt(104114246938590))
+			rune_, err := runes2.NewRuneFromNumber(big.NewInt(104114246938590))
 			require.NoError(t, err)
 
-			runestone := &runes.Runestone{
-				Etching: &runes.Etching{
+			runestone := &runes2.Runestone{
+				Etching: &runes2.Etching{
 					Divisibility: &divisibility,
 					Premine:      big.NewInt(210000000),
 					Rune:         rune_,
@@ -105,7 +104,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d15010a0201030004dedfd1e58fd617054d0680b19164")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
@@ -115,11 +114,11 @@ func TestRunestone(t *testing.T) {
 			spasers := uint32(256)
 			symbol := rune(36)
 			pointer := uint32(1)
-			rune_, err := runes.NewRuneFromNumber(big.NewInt(1490942589659574650))
+			rune_, err := runes2.NewRuneFromNumber(big.NewInt(1490942589659574650))
 			require.NoError(t, err)
 
-			runestone := &runes.Runestone{
-				Etching: &runes.Etching{
+			runestone := &runes2.Runestone{
+				Etching: &runes2.Etching{
 					Divisibility: &divisibility,
 					Premine:      big.NewInt(100000000),
 					Rune:         rune_,
@@ -132,7 +131,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
@@ -141,7 +140,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d09008fe69d0154d70e0115")
 			require.NoError(t, err)
 
-			_, err = runes.ParseRunestone(data)
+			_, err = runes2.ParseRunestone(data)
 			require.Error(t, err)
 			require.ErrorContains(t, err, "EOF")
 		})
@@ -150,10 +149,10 @@ func TestRunestone(t *testing.T) {
 	t.Run("data into script", func(t *testing.T) {
 		t.Run("edict only", func(t *testing.T) {
 			script := "6a5d09008fe69d0154d70e01"
-			runestone := &runes.Runestone{
-				Edicts: []runes.Edict{
+			runestone := &runes2.Runestone{
+				Edicts: []runes2.Edict{
 					{
-						RuneID: runes.RuneID{
+						RuneID: runes2.RuneID{
 							Block: 2585359,
 							TxID:  84,
 						},
@@ -170,8 +169,8 @@ func TestRunestone(t *testing.T) {
 
 		t.Run("mint only", func(t *testing.T) {
 			script := "6a5d0814e5e49d0114cc01"
-			runestone := &runes.Runestone{
-				Mint: &runes.RuneID{
+			runestone := &runes2.Runestone{
+				Mint: &runes2.RuneID{
 					Block: 2585189,
 					TxID:  204,
 				},
@@ -185,8 +184,8 @@ func TestRunestone(t *testing.T) {
 		t.Run("mint with pointer", func(t *testing.T) {
 			script := "6a5d0a14b0dd9d011482011601"
 			pointer := uint32(1)
-			runestone := &runes.Runestone{
-				Mint: &runes.RuneID{
+			runestone := &runes2.Runestone{
+				Mint: &runes2.RuneID{
 					Block: 2584240,
 					TxID:  130,
 				},
@@ -201,7 +200,7 @@ func TestRunestone(t *testing.T) {
 		t.Run("pointer only", func(t *testing.T) {
 			script := "6a5d02160e"
 			pointer := uint32(14)
-			runestone := &runes.Runestone{
+			runestone := &runes2.Runestone{
 				Pointer: &pointer,
 			}
 
@@ -215,11 +214,11 @@ func TestRunestone(t *testing.T) {
 			divisibility := byte(10)
 			spasers := uint32(0)
 			symbol := rune(77)
-			rune_, err := runes.NewRuneFromNumber(big.NewInt(104114246938590))
+			rune_, err := runes2.NewRuneFromNumber(big.NewInt(104114246938590))
 			require.NoError(t, err)
 
-			runestone := &runes.Runestone{
-				Etching: &runes.Etching{
+			runestone := &runes2.Runestone{
+				Etching: &runes2.Etching{
 					Divisibility: &divisibility,
 					Premine:      big.NewInt(210000000),
 					Rune:         rune_,
@@ -238,11 +237,11 @@ func TestRunestone(t *testing.T) {
 			spasers := uint32(256)
 			symbol := rune(36)
 			pointer := uint32(1)
-			rune_, err := runes.NewRuneFromNumber(big.NewInt(1490942589659574650))
+			rune_, err := runes2.NewRuneFromNumber(big.NewInt(1490942589659574650))
 			require.NoError(t, err)
 
-			runestone := &runes.Runestone{
-				Etching: &runes.Etching{
+			runestone := &runes2.Runestone{
+				Etching: &runes2.Etching{
 					Divisibility: &divisibility,
 					Premine:      big.NewInt(100000000),
 					Rune:         rune_,
@@ -255,7 +254,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601")
 			require.NoError(t, err)
 
-			parsedRunestone, err := runes.ParseRunestone(data)
+			parsedRunestone, err := runes2.ParseRunestone(data)
 			require.NoError(t, err)
 			require.Equal(t, runestone, parsedRunestone)
 		})
@@ -267,7 +266,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("14e5e49d0114cc01")
 			require.NoError(t, err)
 
-			seq, err := runes.PayloadIntoIntSequence(data)
+			seq, err := runes2.PayloadIntoIntSequence(data)
 			require.NoError(t, err)
 			require.Equal(t, tSeq, seq)
 		})
@@ -277,7 +276,7 @@ func TestRunestone(t *testing.T) {
 			data, err := hex.DecodeString("008fe69d0154d70e01")
 			require.NoError(t, err)
 
-			seq, err := runes.PayloadIntoIntSequence(data)
+			seq, err := runes2.PayloadIntoIntSequence(data)
 			require.NoError(t, err)
 			require.Equal(t, tSeq, seq)
 		})
@@ -290,7 +289,7 @@ func TestRunestone(t *testing.T) {
 			seq := []*big.Int{big.NewInt(20), big.NewInt(2585189), big.NewInt(20), big.NewInt(204)}
 			payload := "14e5e49d0114cc01"
 
-			data, err := runes.IntSequenceIntoPayload(seq)
+			data, err := runes2.IntSequenceIntoPayload(seq)
 			require.NoError(t, err)
 			require.Equal(t, payload, hex.EncodeToString(data))
 		})
@@ -299,7 +298,7 @@ func TestRunestone(t *testing.T) {
 			seq := []*big.Int{big.NewInt(0), big.NewInt(2585359), big.NewInt(84), big.NewInt(1879), big.NewInt(1)}
 			payload := "008fe69d0154d70e01"
 
-			data, err := runes.IntSequenceIntoPayload(seq)
+			data, err := runes2.IntSequenceIntoPayload(seq)
 			require.NoError(t, err)
 			require.Equal(t, payload, hex.EncodeToString(data))
 		})
@@ -331,7 +330,7 @@ func TestRunestone(t *testing.T) {
 		for _, test := range tests {
 			script, err := hex.DecodeString(test.script)
 			require.NoError(t, err)
-			require.Equal(t, test.mustBe, runes.IsPossibleRunestone(script))
+			require.Equal(t, test.mustBe, runes2.IsPossibleRunestone(script))
 		}
 	})
 
@@ -353,7 +352,7 @@ func TestRunestone(t *testing.T) {
 			script, err := hex.DecodeString(test.script)
 			require.NoError(t, err)
 
-			runestone, err := runes.ParseRunestone(script)
+			runestone, err := runes2.ParseRunestone(script)
 			require.NoError(t, err)
 			require.Equal(t, test.isValidEtching, runestone.IsValidEtching(2))
 			require.Equal(t, test.isValidMint, runestone.IsValidMint(2))

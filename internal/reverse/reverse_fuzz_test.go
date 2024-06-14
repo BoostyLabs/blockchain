@@ -1,3 +1,6 @@
+// Copyright (C) 2024 Creditor Corp. Group.
+// See LICENSE for copying information.
+
 package reverse_test
 
 import (

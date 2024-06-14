@@ -4,13 +4,12 @@
 package runes_test
 
 import (
+	"blockchain/bitcoin/ord/runes"
 	"errors"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"blockchain/bitcoin/runes"
 )
 
 func TestRunes(t *testing.T) {
