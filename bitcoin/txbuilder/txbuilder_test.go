@@ -5,7 +5,6 @@ package txbuilder_test
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"math/big"
 	"math/rand"
@@ -97,9 +96,9 @@ func TestTxBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildRuneTransferTx", func(t *testing.T) {
-		expectedTxB64 := "AgAAAAJGVyhT9+vWTklCoOBfu/NS6euHjw4nbtVD7EMc1lKK1wQAAAAA/////0ZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////BiICAAAAAAAAIV9iaXRjb2luX3RyYW5zYWN0aW9uX3J1bmVfc2NyaXB0X1D4DAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8AAAAAAAAAAAxqXQkWAgDiCE2dGgEiAgAAAAAAACJRIC7q+7+Sry0fXghmy+vWF7mVYl83YnpjjJBN3SaFRMMQIgIAAAAAAAAiUSDJNteVAzZwcCPLnRgIbT6Xk34xxXH/zsdw2IQLjiBaZBvwDAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQAAAAA"
+		expectedTxB64 := "cHNidP8BAPICAAAAAkZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////RlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcCAAAAAP////8EAAAAAAAAAAAMal0JFgIA4ghNnRoBIgIAAAAAAAAiUSAu6vu/kq8tH14IZsvr1he5lWJfN2J6Y4yQTd0mhUTDECICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQb8AwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEQAQABIAEAAAEBKiICAAAAAAAAIV9iaXRjb2luX3RyYW5zYWN0aW9uX3J1bmVfc2NyaXB0XwEDBAEAAAABFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwABASVQ+AwAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgAAAAAAA=="
 		runeID := runes.RuneID{Block: 1122, TxID: 77}
-		txBytes, _, _, _, err := txBuilder.BuildRunesTransferTx(txbuilder.BaseRunesTransferParams{
+		result, err := txBuilder.BuildRunesTransferTx(txbuilder.BaseRunesTransferParams{
 			RuneID: runeID,
 			RuneUTXOs: []bitcoin.UTXO{
 				{
@@ -125,64 +124,10 @@ func TestTxBuilder(t *testing.T) {
 			RecipientTaprootAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
 			SenderTaprootAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
 			SenderPaymentAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+			SenderTaprootPubKey:     "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+			SenderPaymentPubKey:     "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
 		})
 		require.NoError(t, err)
-		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(txBytes))
-	})
-
-	t.Run("BuildUserRuneTransferTx", func(t *testing.T) {
-		expectedTxB64 := "AAAAAQAAAANwc2J0/wEA/VsBAgAAAAQQM59mtJnCrkg/Sj4O1EP2x+6JllKBu9ROcpHXH0m66gEAAAAA/////9Dz9Nv4btLdZfguL/SdH2s3EkM4VdQkCoUmSqDb7Kt4AAAAAAD/////sxo5ARA/WJnCcZ3a+q6JIzr5V8KGzJ1NWY1IyBwtKHACAAAAAP/////BtLuHj9VBtjFHSykxbn0QsjwAh8BROcT5tgpSqB+ibQAAAAAA/////wUAAAAAAAAAAA5qXQsWAgCN3p0BJpBOASICAAAAAAAAIlEgLur7v5KvLR9eCGbL69YXuZViXzdiemOMkE3dJoVEwxAiAgAAAAAAACJRIPkbPbLDMWl/+IzsLX9g4PFYSVOsLpfBuvfGFrjCjTtreB4AAAAAAAAXqRSqWI6UYef8rM0QtTTbRyLdcjEiwYfuAAAAAAAAABepFCUQTc/Trxe35YYAv98z2iZj4M3RhwAAAAAAAQErIgIAAAAAAAAiUSD5Gz2ywzFpf/iM7C1/YODxWElTrC6Xwbr3xha4wo07awEDBAEAAAABFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwABASC8LwAAAAAAABepFCUQTc/Trxe35YYAv98z2iZj4M3RhwEDBAEAAAABBBYAFPPrPEU7ARQeYCvrLRM19r5Qe4E4AAEBIPAXAAAAAAAAF6kUJRBNz9OvF7flhgC/3zPaJmPgzdGHAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgAAQEguAsAAAAAAAAXqRQlEE3P068Xt+WGAL/fM9omY+DN0YcBAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAAAAAA=="
-		runeID := runes.RuneID{Block: 2584333, TxID: 38}
-		btx, _ := hex.DecodeString("5120f91b3db2c331697ff88cec2d7f60e0f1584953ac2e97c1baf7c616b8c28d3b6b")
-		btx1, _ := hex.DecodeString("a91425104dcfd3af17b7e58600bfdf33da2663e0cdd187")
-		txBytes, err := txBuilder.BuildUserTransferRuneTx(txbuilder.UserRunesTransferParams{
-			BaseRunesTransferParams: txbuilder.BaseRunesTransferParams{
-				RuneID: runeID,
-				RuneUTXOs: []bitcoin.UTXO{
-					{
-						TxHash:  "eaba491fd791724ed4bb81529689eec7f643d40e3e4a3f48aec299b4669f3310",
-						Index:   1,
-						Amount:  big.NewInt(546),
-						Script:  btx,
-						Address: "tb1plydnmvkrx95hl7yvaskh7c8q79vyj5av96turwhhcctt3s5d8d4spjttqx",
-						Runes:   []bitcoin.RuneUTXO{{RuneID: runeID, Amount: big.NewInt(15000)}},
-					},
-				},
-				BaseUTXOs: []bitcoin.UTXO{
-					{
-						TxHash:  "78abecdba04a26850a24d455384312376b1f9df42f2ef865ddd26ef8dbf4f3d0",
-						Index:   0,
-						Amount:  big.NewInt(12220),
-						Script:  btx1,
-						Address: "2MvdCXCZZsJc3g9gsXhWdAoTwzoTX2vq3yv",
-					},
-					{
-						TxHash:  "70282d1cc8488d594d9dcc86c257f93a2389aefada9d71c299583f1001391ab3",
-						Index:   2,
-						Amount:  big.NewInt(6128),
-						Script:  btx1,
-						Address: "2MvdCXCZZsJc3g9gsXhWdAoTwzoTX2vq3yv",
-					},
-					{
-						TxHash:  "6da21fa8520ab6f9c43951c087003cb2107d6e31294b4731b641d58f87bbb4c1",
-						Index:   0,
-						Amount:  big.NewInt(3000),
-						Script:  btx1,
-						Address: "2MvdCXCZZsJc3g9gsXhWdAoTwzoTX2vq3yv",
-					},
-				},
-				TransferRuneAmount:      big.NewInt(10000),
-				RecipientTaprootAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
-				SenderTaprootAddress:    "tb1plydnmvkrx95hl7yvaskh7c8q79vyj5av96turwhhcctt3s5d8d4spjttqx",
-				SenderPaymentAddress:    "2MvdCXCZZsJc3g9gsXhWdAoTwzoTX2vq3yv",
-				SatoshiPerKVByte:        big.NewInt(24500),
-				SatoshiCommissionAmount: big.NewInt(7800), // ~ 5$.
-				RecipientPaymentAddress: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
-			},
-			SenderTaprootPubKey: "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
-			SenderPaymentPubKey: "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
-		})
-		require.NoError(t, err)
-		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(txBytes))
+		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
 	})
 }

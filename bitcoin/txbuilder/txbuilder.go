@@ -5,7 +5,6 @@ package txbuilder
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -47,13 +46,6 @@ var (
 	returnOutput uint32 = 2
 )
 
-// UserRunesTransferParams describes data needed to build transaction for user to sign.
-type UserRunesTransferParams struct {
-	BaseRunesTransferParams
-	SenderTaprootPubKey string
-	SenderPaymentPubKey string
-}
-
 // BaseRunesTransferParams describes basic data needed to build rune transfer transaction.
 type BaseRunesTransferParams struct {
 	RuneID                  runes.RuneID
@@ -66,14 +58,30 @@ type BaseRunesTransferParams struct {
 	RecipientPaymentAddress string         // recipient commission address.
 	SenderTaprootAddress    string         // sender runes address.
 	SenderPaymentAddress    string         // sender commission/fee payment address.
+	SenderTaprootPubKey     string         // sender taproot public key.
+	SenderPaymentPubKey     string         // sender payment public key.
 }
 
-// PSBTParams describes data needed to convert unsigned rune transfer transaction
+// BaseRunesTransferResult describes result of buildBaseTransferRuneTx method.
+type BaseRunesTransferResult struct {
+	UnsignedRawTx *wire.MsgTx     // unsigned rune transfer transaction.
+	UsedRuneUTXOs []*bitcoin.UTXO // used rune utxos in transaction.
+	UsedBaseUTXOs []*bitcoin.UTXO // used bitcoin utxos in transaction.
+	EstimatedFee  *big.Int        // estimated transaction fee in Satoshi.
+}
+
+// BuildRunesTransferTxResult describes result of BuildRunesTransferTx method.
+type BuildRunesTransferTxResult struct {
+	SerializedPSBT []byte          // serialised unsigned rune transfer transaction in PSBT format.
+	UsedRuneUTXOs  []*bitcoin.UTXO // used rune utxos in transaction.
+	UsedBaseUTXOs  []*bitcoin.UTXO // used bitcoin utxos in transaction.
+	EstimatedFee   *big.Int        // estimated transaction fee in Satoshi.
+}
+
+// BuildRunesTransferPSBTParams describes data needed to convert unsigned rune transfer transaction
 // to partly signed bitcoin transaction (PSBT).
-type PSBTParams struct {
-	Tx                  *wire.MsgTx
-	UsedRuneUTXOs       []*bitcoin.UTXO
-	UsedBaseUTXOs       []*bitcoin.UTXO
+type BuildRunesTransferPSBTParams struct {
+	BaseRunesTransferResult
 	SenderTaprootPubKey string
 	SenderPaymentPubKey string
 }
@@ -90,70 +98,30 @@ func NewTxBuilder(networkParams *chaincfg.Params) *TxBuilder {
 	}
 }
 
-// BuildRunesTransferTx constructs rune transferring transaction for internal
-// use with addition info in outputs. Returns serialized transaction,
-// used rune and base outputs, estimated fee in satoshi, and error if any.
-// Inserts data needed to sign inputs to outputs with the same indexes, then appends real outputs.
-func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) ([]byte, []*bitcoin.UTXO, []*bitcoin.UTXO, *big.Int, error) {
-	tx, usedRuneUTXOs, usedBaseUTXOs, fee, err := b.buildBaseTransferRuneTx(params)
+// BuildRunesTransferTx constructs rune transferring transaction in PSBT
+// format with inputs indexes assigned in unknown fields. Returns serialized
+// PSBT transaction with used rune and base outputs, estimated fee in satoshi,
+// and error if any.
+func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) (result BuildRunesTransferTxResult, _ error) {
+	buildBaseTransferRuneTxResult, err := b.buildBaseTransferRuneTx(params)
 	if err != nil {
-		return nil, nil, nil, fee, err
+		return result, err
 	}
 
-	var (
-		usedRuneUTXOsLen = len(usedRuneUTXOs)
-		usedBaseUTXOsLen = len(usedBaseUTXOs)
-		helpingTxOuts    = make([]*wire.TxOut, usedRuneUTXOsLen+usedBaseUTXOsLen)
-	)
-	for i := 0; i < usedRuneUTXOsLen; i++ {
-		helpingTxOuts[i] = wire.NewTxOut(usedRuneUTXOs[i].Amount.Int64(), usedRuneUTXOs[i].Script)
-	}
-	for i := 0; i < usedBaseUTXOsLen; i++ {
-		helpingTxOuts[i+usedRuneUTXOsLen] = wire.NewTxOut(usedBaseUTXOs[i].Amount.Int64(), usedBaseUTXOs[i].Script)
-	}
+	result.UsedRuneUTXOs = buildBaseTransferRuneTxResult.UsedRuneUTXOs
+	result.UsedBaseUTXOs = buildBaseTransferRuneTxResult.UsedBaseUTXOs
+	result.EstimatedFee = buildBaseTransferRuneTxResult.EstimatedFee
 
-	// Insert helping data at the beginning.
-	tx.TxOut = append(helpingTxOuts, tx.TxOut...)
-
-	w := bytes.NewBuffer(nil)
-	err = tx.SerializeNoWitness(w)
+	result.SerializedPSBT, err = b.BuildRunesTransferPSBT(BuildRunesTransferPSBTParams{
+		BaseRunesTransferResult: buildBaseTransferRuneTxResult,
+		SenderTaprootPubKey:     params.SenderTaprootPubKey,
+		SenderPaymentPubKey:     params.SenderPaymentPubKey,
+	})
 	if err != nil {
-		return nil, nil, nil, fee, err
+		return result, err
 	}
 
-	return w.Bytes(), usedRuneUTXOs, usedBaseUTXOs, fee, nil
-}
-
-// BuildUserTransferRuneTx constructs and returns serialized rune transferring transaction for external user signing.
-func (b *TxBuilder) BuildUserTransferRuneTx(params UserRunesTransferParams) (_ []byte, err error) {
-	psbtParams := PSBTParams{
-		SenderTaprootPubKey: params.SenderTaprootPubKey,
-		SenderPaymentPubKey: params.SenderPaymentPubKey,
-	}
-
-	psbtParams.Tx, psbtParams.UsedRuneUTXOs, psbtParams.UsedBaseUTXOs, _, err = b.buildBaseTransferRuneTx(params.BaseRunesTransferParams)
-	if err != nil {
-		return nil, err
-	}
-
-	// for parsing on frontend side, there should be provided indexes of runes inputs and payment respectively.
-	// by our transaction strategy, we always have group of runes inputs followed by payment inputs.
-	// thus, we should write two numbers as uint32 BigEndian at the beginning of the serialised tx.
-	// result: [runes inputs amount] (4 bytes) -> [payment inputs amount] (4 bytes) -> [serialised PSBT] (variable size).
-	runesInputsAmount := uint32(len(psbtParams.UsedRuneUTXOs))
-	baseInputsAmount := uint32(len(psbtParams.UsedBaseUTXOs))
-
-	psbt, err := b.BuildTransferRunePSBT(psbtParams)
-	if err != nil {
-		return nil, err
-	}
-
-	modifiedPSBT := make([]byte, 0, len(psbtParams.UsedRuneUTXOs)+len(psbtParams.UsedBaseUTXOs)+len(psbt))
-	modifiedPSBT = binary.BigEndian.AppendUint32(modifiedPSBT, runesInputsAmount)
-	modifiedPSBT = binary.BigEndian.AppendUint32(modifiedPSBT, baseInputsAmount)
-	modifiedPSBT = append(modifiedPSBT, psbt...)
-
-	return modifiedPSBT, nil
+	return result, nil
 }
 
 // buildBaseTransferRuneTx constructs base rune transferring transaction.
@@ -189,10 +157,10 @@ func (b *TxBuilder) BuildUserTransferRuneTx(params UserRunesTransferParams) (_ [
 //	│       4 │ base output  │ outputs to change bitcoin amount.      │
 //	│         │              │ 99% mandatory, if any left.            │
 //	└─────────┴──────────────┴────────────────────────────────────────┘
-func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wire.MsgTx, []*bitcoin.UTXO, []*bitcoin.UTXO, *big.Int, error) {
+func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (result BaseRunesTransferResult, _ error) {
 	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RuneUTXOs, params.TransferRuneAmount, params.RuneID)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return result, err
 	}
 
 	runestone := &runes.Runestone{
@@ -220,19 +188,19 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 	baseUTXOs, bitcoinAmount, fee, err := PrepareUTXOs(params.BaseUTXOs, len(runeUTXOs), outputs,
 		satTransferAmount, params.SatoshiPerKVByte)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return result, err
 	}
 
 	runestoneData, err := runestone.IntoScript()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return result, err
 	}
 
 	tx := wire.NewMsgTx(txVersion)
 	for _, i := range runeUTXOs {
 		utxoHash, err := chainhash.NewHashFromStr(i.TxHash)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return result, err
 		}
 
 		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(utxoHash, i.Index), nil, nil))
@@ -241,7 +209,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 	for _, i := range baseUTXOs {
 		utxoHash, err := chainhash.NewHashFromStr(i.TxHash)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return result, err
 		}
 
 		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(utxoHash, i.Index), nil, nil))
@@ -256,7 +224,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 	// recipient runes output (#1).
 	err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RecipientTaprootAddress)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return result, err
 	}
 
 	// change runes output (#2).
@@ -268,7 +236,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 
 		err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.SenderTaprootAddress)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return result, err
 		}
 	}
 
@@ -276,7 +244,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
 		err = b.addOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.RecipientPaymentAddress)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return result, err
 		}
 	}
 
@@ -284,16 +252,22 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (*wi
 	if numbers.IsPositive(bitcoinAmount) {
 		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.SenderPaymentAddress)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return result, err
 		}
 	}
 
-	return tx, runeUTXOs, baseUTXOs, fee, nil
+	result.UnsignedRawTx = tx
+	result.UsedRuneUTXOs = runeUTXOs
+	result.UsedBaseUTXOs = baseUTXOs
+	result.EstimatedFee = fee
+
+	return result, nil
 }
 
-// BuildTransferRunePSBT returns serialised PSBT from unsigned transaction.
-func (b *TxBuilder) BuildTransferRunePSBT(params PSBTParams) ([]byte, error) {
-	p, err := psbt.NewFromUnsignedTx(params.Tx)
+// BuildRunesTransferPSBT returns serialised PSBT from unsigned rune transferring transaction
+// with indexes provided in Unknowns defining indexes of inputs with different types.
+func (b *TxBuilder) BuildRunesTransferPSBT(params BuildRunesTransferPSBTParams) ([]byte, error) {
+	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
 	if err != nil {
 		return nil, err
 	}
@@ -304,10 +278,12 @@ func (b *TxBuilder) BuildTransferRunePSBT(params PSBTParams) ([]byte, error) {
 	}
 
 	runeUTXOs := len(params.UsedRuneUTXOs)
+	runeUTXOIndexes := make([]byte, len(params.UsedRuneUTXOs))
 	for i := 0; i < runeUTXOs; i++ {
 		p.Inputs[i].WitnessUtxo = wire.NewTxOut(params.UsedRuneUTXOs[i].Amount.Int64(), params.UsedRuneUTXOs[i].Script)
 		p.Inputs[i].TaprootInternalKey = publicKeyTP
 		p.Inputs[i].SighashType = signHashType
+		runeUTXOIndexes[i] = byte(i)
 	}
 
 	publicKeyPayment, _ := hex.DecodeString(params.SenderPaymentPubKey)
@@ -326,11 +302,16 @@ func (b *TxBuilder) BuildTransferRunePSBT(params PSBTParams) ([]byte, error) {
 		return nil, err
 	}
 
+	baseUTXOIndexes := make([]byte, len(params.UsedBaseUTXOs))
 	for i := 0; i < len(params.UsedBaseUTXOs); i++ {
 		p.Inputs[i+runeUTXOs].WitnessUtxo = wire.NewTxOut(params.UsedBaseUTXOs[i].Amount.Int64(), params.UsedBaseUTXOs[i].Script)
 		p.Inputs[i+runeUTXOs].RedeemScript = witnessProg
 		p.Inputs[i+runeUTXOs].SighashType = signHashType
+		baseUTXOIndexes[i] = byte(i)
 	}
+
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: TaprootInputsHelpingKey.Bytes(), Value: runeUTXOIndexes})
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: PaymentInputsHelpingKey.Bytes(), Value: baseUTXOIndexes})
 
 	w := bytes.NewBuffer(nil)
 	err = p.Serialize(w)
