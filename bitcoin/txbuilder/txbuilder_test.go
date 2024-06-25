@@ -130,4 +130,33 @@ func TestTxBuilder(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
 	})
+
+	t.Run("BuildBTCTransferTx", func(t *testing.T) {
+		expectedTxB64 := "cHNidP8BAIkCAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AjxzAAAAAAAAIlEgLur7v5KvLR9eCGbL69YXuZViXzdiemOMkE3dJoVEwxDvgQwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEQAQAAAQElUPgMAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwAAAA=="
+		result, err := txBuilder.BuildBTCTransferTx(txbuilder.BaseBTCTransferParams{
+			TransferSatoshiAmount: big.NewInt(29500), // 0.000295 BTC.
+			BaseUTXOs: []bitcoin.UTXO{
+				{
+					TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+					Index:   2,
+					Amount:  big.NewInt(850000), // 0.0085 BTC.
+					Script:  []byte("_bitcoin_transaction_script_"),
+					Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+				},
+				{
+					TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+					Index:   4,
+					Amount:  big.NewInt(27000), // 0.00027 BTC.
+					Script:  []byte("_bitcoin_transaction_script_"),
+					Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+				},
+			},
+			SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+			RecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
+			SenderAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+			SenderPubKey:     "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
+	})
 }
