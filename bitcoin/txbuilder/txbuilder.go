@@ -487,7 +487,7 @@ func (b *TxBuilder) BuildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 	switch addressType.(type) {
 	case *btcutil.AddressTaproot:
 		addrType = TaprootInputsHelpingKey
-	case *btcutil.AddressPubKeyHash, *btcutil.AddressPubKey:
+	case *btcutil.AddressPubKeyHash, *btcutil.AddressPubKey, *btcutil.AddressScriptHash:
 		addrType = PaymentInputsHelpingKey
 		pubKey, err = btcec.ParsePubKey(publicKey)
 		if err != nil {
