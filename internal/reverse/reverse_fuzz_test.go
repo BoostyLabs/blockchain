@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"blockchain/internal/reverse"
+	"github.com/BoostyLabs/blockchain/internal/reverse"
 )
 
 func FuzzReverse(f *testing.F) {

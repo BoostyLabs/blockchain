@@ -4,7 +4,6 @@
 package runes
 
 import (
-	"blockchain/bitcoin/ord/runes/utils"
 	"bytes"
 	"errors"
 	"math/big"
@@ -12,7 +11,8 @@ import (
 	"github.com/aviate-labs/leb128"
 	"github.com/btcsuite/btcd/txscript"
 
-	"blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes/utils"
+	"github.com/BoostyLabs/blockchain/internal/sequencereader"
 )
 
 const (

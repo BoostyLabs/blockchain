@@ -4,12 +4,13 @@
 package utils_test
 
 import (
-	"blockchain/bitcoin/ord/runes/utils"
 	"errors"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes/utils"
 )
 
 func TestConditions(t *testing.T) {

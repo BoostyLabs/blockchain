@@ -7,7 +7,7 @@ import (
 	"errors"
 	"math/big"
 
-	"blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 )
 
 var (

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/internal/sequencereader"
 )
 
 func TestSequenceReader(t *testing.T) {

@@ -4,10 +4,11 @@
 package inscriptions_test
 
 import (
-	"blockchain/bitcoin/ord/inscriptions"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 )
 
 func TestID(t *testing.T) {

@@ -17,9 +17,9 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 
-	"blockchain/bitcoin"
-	"blockchain/bitcoin/ord/runes"
-	"blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 const (

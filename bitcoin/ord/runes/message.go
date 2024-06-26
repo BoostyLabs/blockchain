@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"slices"
 
-	"blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/internal/sequencereader"
 )
 
 // fieldType defines helping struct for ordering map.

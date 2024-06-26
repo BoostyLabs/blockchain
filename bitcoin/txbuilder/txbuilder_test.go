@@ -13,9 +13,9 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/stretchr/testify/require"
 
-	"blockchain/bitcoin"
-	"blockchain/bitcoin/ord/runes"
-	"blockchain/bitcoin/txbuilder"
+	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
 )
 
 func TestTxBuilder(t *testing.T) {

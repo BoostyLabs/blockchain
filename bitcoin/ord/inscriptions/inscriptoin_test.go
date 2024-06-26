@@ -4,12 +4,13 @@
 package inscriptions_test
 
 import (
-	"blockchain/bitcoin/ord/inscriptions"
-	"blockchain/bitcoin/ord/runes"
 	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 )
 
 func TestInscription(t *testing.T) {

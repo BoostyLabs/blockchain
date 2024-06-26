@@ -4,11 +4,11 @@
 package txbuilder_test
 
 import (
-	"blockchain/bitcoin/txbuilder"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"testing"
+	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
 )
 
 func TestInputsHelpingKey(t *testing.T) {

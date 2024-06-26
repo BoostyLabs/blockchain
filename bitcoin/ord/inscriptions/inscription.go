@@ -4,7 +4,6 @@
 package inscriptions
 
 import (
-	"blockchain/bitcoin/ord/runes"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -12,8 +11,9 @@ import (
 
 	"github.com/btcsuite/btcd/txscript"
 
-	"blockchain/internal/reverse"
-	"blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/internal/reverse"
+	"github.com/BoostyLabs/blockchain/internal/sequencereader"
 )
 
 // ErrMalformedInscription defines that inscription is malformed and failed to parse.

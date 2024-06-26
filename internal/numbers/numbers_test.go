@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 func TestNumbers(t *testing.T) {
