@@ -341,7 +341,7 @@ func (b *TxBuilder) BuildRunesTransferPSBT(params BuildRunesTransferPSBTParams) 
 		p.Inputs[i+runeUTXOs].WitnessUtxo = wire.NewTxOut(params.UsedBaseUTXOs[i].Amount.Int64(), params.UsedBaseUTXOs[i].Script)
 		p.Inputs[i+runeUTXOs].RedeemScript = witnessProg
 		p.Inputs[i+runeUTXOs].SighashType = signHashType
-		baseUTXOIndexes[i] = byte(i)
+		baseUTXOIndexes[i] = byte(i + runeUTXOs)
 	}
 
 	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: TaprootInputsHelpingKey.Bytes(), Value: runeUTXOIndexes})
