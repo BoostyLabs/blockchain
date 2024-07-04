@@ -300,6 +300,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 // BuildRunesTransferPSBT returns serialised PSBT from unsigned rune transferring transaction
 // with indexes provided in Unknowns field defining indexes of inputs with different types.
+// TODO: Fix public key parsing.
 func (b *TxBuilder) BuildRunesTransferPSBT(params BuildRunesTransferPSBTParams) ([]byte, error) {
 	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
 	if err != nil {
@@ -487,6 +488,9 @@ func (b *TxBuilder) BuildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 	switch addressType.(type) {
 	case *btcutil.AddressTaproot:
 		addrType = TaprootInputsHelpingKey
+		if len(publicKey) == 33 {
+			publicKey = publicKey[1:]
+		}
 	case *btcutil.AddressPubKeyHash, *btcutil.AddressPubKey, *btcutil.AddressScriptHash:
 		addrType = PaymentInputsHelpingKey
 		pubKey, err = btcec.ParsePubKey(publicKey)
