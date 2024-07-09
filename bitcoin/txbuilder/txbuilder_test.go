@@ -140,52 +140,104 @@ func TestTxBuilder(t *testing.T) {
 				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AjxzAAAAAAAAIlEgLur7v5KvLR9eCGbL69YXuZViXzdiemOMkE3dJoVEwxDvgQwAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJVD4DAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
 				txbuilder.BaseBTCTransferParams{
 					TransferSatoshiAmount: big.NewInt(29500), // 0.000295 BTC.
-					BaseUTXOs: []bitcoin.UTXO{
-						{
-							TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-							Index:   2,
-							Amount:  big.NewInt(850000), // 0.0085 BTC.
-							Script:  []byte("_bitcoin_transaction_script_"),
-							Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
 						},
-						{
-							TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-							Index:   4,
-							Amount:  big.NewInt(27000), // 0.00027 BTC.
-							Script:  []byte("_bitcoin_transaction_script_"),
-							Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
-						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
 					},
 					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
 					RecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
-					SenderAddress:    "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
-					SenderPubKey:     "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
 				},
 			},
 			{
 				"cHNidP8BAIkCAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AjxzAAAAAAAAIlEgLur7v5KvLR9eCGbL69YXuZViXzdiemOMkE3dJoVEwxDvgQwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEQAQAAAQElUPgMAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwAAAA==",
 				txbuilder.BaseBTCTransferParams{
 					TransferSatoshiAmount: big.NewInt(29500), // 0.000295 BTC.
-					BaseUTXOs: []bitcoin.UTXO{
-						{
-							TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-							Index:   2,
-							Amount:  big.NewInt(850000), // 0.0085 BTC.
-							Script:  []byte("_bitcoin_transaction_script_"),
-							Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
 						},
-						{
-							TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-							Index:   4,
-							Amount:  big.NewInt(27000), // 0.00027 BTC.
-							Script:  []byte("_bitcoin_transaction_script_"),
-							Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
-						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
 					},
 					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
 					RecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
-					SenderAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
-					SenderPubKey:     "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+				},
+			},
+			{
+				"cHNidP8BAPsCAAAAA0ZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////RlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcEAAAAAP////9GVyhT9+vWTklCoOBfu/NS6euHjw4nbtVD7EMc1lKK1wQAAAAA/////wM8cwAAAAAAACJRIC7q+7+Sry0fXghmy+vWF7mVYl83YnpjjJBN3SaFRMMQ6AMAAAAAAAAXqRSqWI6UYef8rM0QtTTbRyLdcjEiwYfBLQwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEgAgABAREBAAABASUANQwAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgBFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwABASV4aQAAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgAAAAAAA==",
+				txbuilder.BaseBTCTransferParams{
+					TransferSatoshiAmount: big.NewInt(29500), // 0.000295 BTC.
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(3500), // 0.000025 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					FeePayer: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(800000), // 0.008 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
+						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+					},
+					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+					RecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
 				},
 			},
 		}

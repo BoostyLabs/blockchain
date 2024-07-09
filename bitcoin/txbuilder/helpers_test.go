@@ -25,6 +25,10 @@ func TestExtractAddressTypeInputIndexesFromPSBT(t *testing.T) {
 			"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AjxzAAAAAAAAIlEgLur7v5KvLR9eCGbL69YXuZViXzdiemOMkE3dJoVEwxDvgQwAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJVD4DAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
 			map[txbuilder.InputsHelpingKey][]int{txbuilder.PaymentInputsHelpingKey: {0}},
 		},
+		{
+			"cHNidP8BAPsCAAAAA0ZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////RlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcEAAAAAP////9GVyhT9+vWTklCoOBfu/NS6euHjw4nbtVD7EMc1lKK1wQAAAAA/////wM8cwAAAAAAACJRIC7q+7+Sry0fXghmy+vWF7mVYl83YnpjjJBN3SaFRMMQ6AMAAAAAAAAXqRSqWI6UYef8rM0QtTTbRyLdcjEiwYfBLQwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEgAgABAREBAAABASUANQwAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgBFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwABASV4aQAAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgAAAAAAA==",
+			map[txbuilder.InputsHelpingKey][]int{txbuilder.PaymentInputsHelpingKey: {0, 1}, txbuilder.FeePayerTaprootInputsHelpingKey: {0}},
+		},
 	}
 	for _, test := range tests {
 		data, err := base64.StdEncoding.DecodeString(test.psbt)

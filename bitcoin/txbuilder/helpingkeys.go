@@ -19,6 +19,10 @@ const (
 	TaprootInputsHelpingKey InputsHelpingKey = 0x10
 	// PaymentInputsHelpingKey defines key for payment (btc) inputs.
 	PaymentInputsHelpingKey InputsHelpingKey = 0x20
+	// FeePayerTaprootInputsHelpingKey defines key for taproot inputs for fee payer.
+	FeePayerTaprootInputsHelpingKey InputsHelpingKey = 0x11
+	// FeePayerPaymentInputsHelpingKey defines key for payment (btc) inputs for fee payer.
+	FeePayerPaymentInputsHelpingKey InputsHelpingKey = 0x21
 )
 
 // InputsHelpingKeyFromBytes parses bytes array into InputsHelpingKey if any.
@@ -32,6 +36,10 @@ func InputsHelpingKeyFromBytes(b []byte) (InputsHelpingKey, error) {
 		return TaprootInputsHelpingKey, nil
 	case PaymentInputsHelpingKey.Byte():
 		return PaymentInputsHelpingKey, nil
+	case FeePayerTaprootInputsHelpingKey.Byte():
+		return FeePayerTaprootInputsHelpingKey, nil
+	case FeePayerPaymentInputsHelpingKey.Byte():
+		return FeePayerPaymentInputsHelpingKey, nil
 	}
 
 	return 0, ErrUnknownInputsHelpingKey

@@ -29,6 +29,10 @@ func ExtractAddressTypeInputIndexesFromPSBT(data []byte) (map[InputsHelpingKey][
 			key = TaprootInputsHelpingKey
 		case PaymentInputsHelpingKey.Byte():
 			key = PaymentInputsHelpingKey
+		case FeePayerTaprootInputsHelpingKey.Byte():
+			key = FeePayerTaprootInputsHelpingKey
+		case FeePayerPaymentInputsHelpingKey.Byte():
+			key = FeePayerPaymentInputsHelpingKey
 		default:
 			return nil, errors.New("unknown input key")
 		}
