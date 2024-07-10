@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 
 	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
@@ -37,6 +38,10 @@ var (
 	// outputSizeVBytes defined rough tx output size in vBytes.
 	outputSizeVBytes = big.NewInt(30)
 
+	// inscriptionInputSizeVBytes defined rough tx input size in vBytes
+	// with signature, but without witness script data size.
+	inscriptionInputSizeVBytes = big.NewInt(61)
+
 	// nonDustBitcoinAmount defined the smallest needed amount in satoshi to link to rune output.
 	nonDustBitcoinAmount = big.NewInt(546)
 
@@ -47,19 +52,16 @@ var (
 )
 
 // BaseRunesTransferParams describes basic data needed to build rune transfer transaction.
+// NOTE: fee payer's utxos should contain btc only, any joined runes will transferred to RunesRecipientAddress.
 type BaseRunesTransferParams struct {
 	RuneID                     runes.RuneID
-	RuneUTXOs                  []bitcoin.UTXO // must be sorted by rune amount desc.
-	BaseUTXOs                  []bitcoin.UTXO // must be sorted by btc amount desc.
-	TransferRuneAmount         *big.Int       // runes amount to transfer.
-	SatoshiPerKVByte           *big.Int       // fee rate in satoshi per kilo virtual byte.
-	SatoshiCommissionAmount    *big.Int       // additional commission in satoshi to be charged from user.
-	RecipientTaprootAddress    string         // recipient runes address.
-	CommissionRecipientAddress string         // recipient commission address.
-	SenderTaprootAddress       string         // sender runes address.
-	SenderPaymentAddress       string         // sender commission/fee payment address.
-	SenderTaprootPubKey        string         // sender taproot public key.
-	SenderPaymentPubKey        string         // sender payment public key.
+	TransferRuneAmount         *big.Int     // runes amount to transfer.
+	RunesSender                *PaymentData // mandatory. must be sorted by rune amount desc.
+	FeePayer                   *PaymentData // mandatory. must be sorted by btc amount desc.
+	SatoshiPerKVByte           *big.Int     // fee rate in satoshi per kilo virtual byte.
+	RunesRecipientAddress      string       // recipient runes address.
+	SatoshiCommissionAmount    *big.Int     // additional commission in satoshi to be charged from user.
+	CommissionRecipientAddress string       // recipient commission address.
 }
 
 // BaseRunesTransferResult describes result of buildBaseTransferRuneTx method.
@@ -82,8 +84,17 @@ type BuildRunesTransferTxResult struct {
 // to partly signed bitcoin transaction (PSBT).
 type BuildRunesTransferPSBTParams struct {
 	BaseRunesTransferResult
-	SenderTaprootPubKey string
-	SenderPaymentPubKey string
+	RunesSenderPubKey  string
+	RunesSenderAddress string
+	FeePayerPubKey     string
+	FeePayerAddress    string
+}
+
+// PaymentData defined data needed to construct inputs.
+type PaymentData struct {
+	UTXOs   []bitcoin.UTXO // must be sorted by target token amount desc.
+	Address string         // payer address.
+	PubKey  string         // payer public key.
 }
 
 // BaseBTCTransferParams describes basic data needed to build btc transfer transaction.
@@ -98,13 +109,6 @@ type BaseBTCTransferParams struct {
 	CommissionReceiverAddress string       // recipient commission address, optional.
 }
 
-// PaymentData defined data needed to construct inputs.
-type PaymentData struct {
-	UTXOs   []bitcoin.UTXO // must be sorted by target token amount desc.
-	Address string         // payer address.
-	PubKey  string         // payer public key.
-}
-
 // BaseBTCTransferResult describes result of buildBaseTransferBTCTx method.
 type BaseBTCTransferResult struct {
 	UnsignedRawTx         *wire.MsgTx     // unsigned btc transfer transaction.
@@ -115,7 +119,7 @@ type BaseBTCTransferResult struct {
 
 // BuildBTCTransferTxResult describes result of BuildBTCTransferTx method.
 type BuildBTCTransferTxResult struct {
-	SerializedPSBT        []byte          // serialised unsigned rune transfer transaction in PSBT format.
+	SerializedPSBT        []byte          // serialised unsigned btc transfer transaction in PSBT format.
 	UsedSenderBaseUTXOs   []*bitcoin.UTXO // used sender's bitcoin utxos in transaction.
 	UsedFeePayerBaseUTXOs []*bitcoin.UTXO // used fee payer's bitcoin utxos in transaction.
 	EstimatedFee          *big.Int        // estimated transaction fee in Satoshi.
@@ -129,6 +133,77 @@ type BuildBTCTransferPSBTParams struct {
 	SenderPubKey    string
 	FeePayerAddress string
 	FeePayerPubKey  string
+}
+
+// BaseInscriptionTxParams describes basic data needed to build inscription commitment transaction.
+// NOTE: utxos should contain btc only, any joined runes will be lost.
+type BaseInscriptionTxParams struct {
+	Sender                    *PaymentData              // sender payment data. mandatory.
+	SatoshiPerKVByte          *big.Int                  // fee rate in satoshi per kilo virtual byte.
+	SatoshiCommissionAmount   *big.Int                  // additional commission in satoshi to be charged from user, optional.
+	CommissionReceiverAddress string                    // recipient commission address, optional.
+	Inscription               *inscriptions.Inscription // inscription data to commit.
+	InscriptionBasePubKey     string                    // public key needed to create inscription address.
+}
+
+// BaseInscriptionTxResult describes result of buildBaseInscriptionTx method.
+type BaseInscriptionTxResult struct {
+	UnsignedRawTx *wire.MsgTx     // unsigned inscription commitment transaction.
+	UsedBaseUTXOs []*bitcoin.UTXO // used sender's bitcoin utxos in transaction.
+	EstimatedFee  *big.Int        // estimated transaction fee in Satoshi.
+}
+
+// BuildInscriptionTxPSBTParams describes data needed to convert unsigned
+// inscription commitment transaction to partly signed bitcoin transaction (PSBT).
+type BuildInscriptionTxPSBTParams struct {
+	BaseInscriptionTxResult
+	SenderAddress string
+	SenderPubKey  string
+}
+
+// BuildInscriptionTxPSBTResult describes result of buildInscriptionTxPSBT method.
+type BuildInscriptionTxPSBTResult struct {
+	SerializedPSBT []byte          // serialised unsigned inscription commitment transaction in PSBT format.
+	UsedBaseUTXOs  []*bitcoin.UTXO // used sender's bitcoin utxos in transaction.
+	EstimatedFee   *big.Int        // estimated transaction fee in Satoshi.
+}
+
+// BaseRuneEtchTxParams describes basic data needed to build inscription reveal - etch transaction.
+// NOTE: utxos should contain btc only, any joined runes will be transferred to RunesRecipientAddress.
+type BaseRuneEtchTxParams struct {
+	InscriptionReveal     *PaymentData              // inscription commitment data. mandatory. must contain one utxo only. address can be omitted.
+	Inscription           *inscriptions.Inscription // used inscription data.
+	Rune                  *runes.Etching            // rune etching data.
+	AdditionalPayments    *PaymentData              // sender payment data. mandatory.
+	SatoshiPerKVByte      *big.Int                  // fee rate in satoshi per kilo virtual byte.
+	RunesRecipientAddress string                    // recipient address to receive etched runes.
+	SatoshiChangeAddress  string                    // address to receive btc change if any left.
+}
+
+// BaseRuneEtchTxResult describes result of buildBaseRuneEtchTx method.
+type BaseRuneEtchTxResult struct {
+	UnsignedRawTx           *wire.MsgTx               // unsigned inscription reveal - etch transaction.
+	InscriptionUTXO         bitcoin.UTXO              // reveal inscription utxo data.
+	InscriptionReveal       *inscriptions.Inscription // used inscription data.
+	UsedAdditionalBaseUTXOs []*bitcoin.UTXO           // used additional payment bitcoin utxos in transaction.
+	EstimatedFee            *big.Int                  // estimated transaction fee in Satoshi.
+}
+
+// BuildRuneEtchTxPSBTParams describes data needed to convert unsigned inscription
+// reveal - etch transaction to partly signed bitcoin transaction (PSBT).
+type BuildRuneEtchTxPSBTParams struct {
+	BaseRuneEtchTxResult
+	InscriptionBasePubKey     string // public key needed to create inscription address.
+	InscriptionBaseAddress    string // inscription generated address.
+	AdditionalPaymentsAddress string
+	AdditionalPaymentsPubKey  string
+}
+
+// BuildRuneEtchTxPSBTResult describes result of BuildRuneEtchTx method.
+type BuildRuneEtchTxPSBTResult struct {
+	SerializedPSBT          []byte          // serialised unsigned inscription reveal - etch transaction in PSBT format.
+	UsedAdditionalBaseUTXOs []*bitcoin.UTXO // used additional payment bitcoin utxos in transaction.
+	EstimatedFee            *big.Int        // estimated transaction fee in Satoshi.
 }
 
 // TxBuilder provides transaction building related logic.
@@ -157,10 +232,12 @@ func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) (result
 	result.UsedBaseUTXOs = buildBaseTransferRuneTxResult.UsedBaseUTXOs
 	result.EstimatedFee = buildBaseTransferRuneTxResult.EstimatedFee
 
-	result.SerializedPSBT, err = b.BuildRunesTransferPSBT(BuildRunesTransferPSBTParams{
+	result.SerializedPSBT, err = b.buildRunesTransferPSBT(BuildRunesTransferPSBTParams{
 		BaseRunesTransferResult: buildBaseTransferRuneTxResult,
-		SenderTaprootPubKey:     params.SenderTaprootPubKey,
-		SenderPaymentPubKey:     params.SenderPaymentPubKey,
+		RunesSenderPubKey:       params.RunesSender.PubKey,
+		RunesSenderAddress:      params.RunesSender.Address,
+		FeePayerPubKey:          params.FeePayer.PubKey,
+		FeePayerAddress:         params.FeePayer.Address,
 	})
 	if err != nil {
 		return result, err
@@ -203,7 +280,14 @@ func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) (result
 //	│         │              │ 99% mandatory, if any left.            │
 //	└─────────┴──────────────┴────────────────────────────────────────┘
 func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (result BaseRunesTransferResult, _ error) {
-	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RuneUTXOs, params.TransferRuneAmount, params.RuneID)
+	if params.RunesSender == nil {
+		return result, errors.New("runes sender data required")
+	}
+	if params.FeePayer == nil {
+		return result, errors.New("fee payer data required")
+	}
+
+	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, params.TransferRuneAmount, params.RuneID)
 	if err != nil {
 		return result, err
 	}
@@ -231,7 +315,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	}
 
 	prepareUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-		Utxos:            params.BaseUTXOs,
+		Utxos:            params.FeePayer.UTXOs,
 		Inputs:           len(runeUTXOs),
 		Outputs:          outputs,
 		TransferAmount:   satTransferAmount,
@@ -272,14 +356,14 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	tx.AddTxOut(wire.NewTxOut(0, runestoneData))
 
 	// recipient runes output (#1).
-	err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RecipientTaprootAddress)
+	err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesRecipientAddress)
 	if err != nil {
 		return result, err
 	}
 
 	// change runes output (#2).
 	if runestone.Pointer != nil {
-		err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.SenderTaprootAddress)
+		err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesSender.Address)
 		if err != nil {
 			return result, err
 		}
@@ -295,7 +379,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// change btc output (#4).
 	if numbers.IsPositive(prepareUTXOsResult.TotalAmount) && numbers.IsGreater(prepareUTXOsResult.TotalAmount, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, prepareUTXOsResult.TotalAmount, prepareUTXOsResult.TotalAmount, params.SenderPaymentAddress)
+		err = b.addOutput(tx, prepareUTXOsResult.TotalAmount, prepareUTXOsResult.TotalAmount, params.FeePayer.Address)
 		if err != nil {
 			return result, err
 		}
@@ -309,55 +393,60 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	return result, nil
 }
 
-// BuildRunesTransferPSBT returns serialised PSBT from unsigned rune transferring transaction
+// buildRunesTransferPSBT returns serialised PSBT from unsigned rune transferring transaction
 // with indexes provided in Unknowns field defining indexes of inputs with different types.
-// TODO: Fix public key parsing.
-func (b *TxBuilder) BuildRunesTransferPSBT(params BuildRunesTransferPSBTParams) ([]byte, error) {
+func (b *TxBuilder) buildRunesTransferPSBT(params BuildRunesTransferPSBTParams) ([]byte, error) {
 	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
 	if err != nil {
 		return nil, err
 	}
 
-	publicKeyTP, err := hex.DecodeString(params.SenderTaprootPubKey)
+	runesSenderAddressData, err := b.prepareAddressData(params.RunesSenderPubKey, params.RunesSenderAddress)
 	if err != nil {
 		return nil, err
 	}
 
-	runeUTXOs := len(params.UsedRuneUTXOs)
-	runeUTXOIndexes := make([]byte, len(params.UsedRuneUTXOs))
-	for i := 0; i < runeUTXOs; i++ {
-		p.Inputs[i].WitnessUtxo = wire.NewTxOut(params.UsedRuneUTXOs[i].Amount.Int64(), params.UsedRuneUTXOs[i].Script)
-		p.Inputs[i].TaprootInternalKey = publicKeyTP
+	feePayerAddressData, err := b.prepareAddressData(params.FeePayerPubKey, params.FeePayerAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	senderIndexes := make([]byte, len(params.UsedRuneUTXOs))
+	for i, utxo := range params.UsedRuneUTXOs {
+		switch runesSenderAddressData.addrType {
+		case TaprootInputsHelpingKey:
+			p.Inputs[i].TaprootInternalKey = runesSenderAddressData.publicKeyBytes
+		case PaymentInputsHelpingKey:
+			p.Inputs[i].RedeemScript = runesSenderAddressData.witnessProg
+		}
+		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 		p.Inputs[i].SighashType = signHashType
-		runeUTXOIndexes[i] = byte(i)
+		senderIndexes[i] = byte(i)
 	}
 
-	publicKeyPayment, _ := hex.DecodeString(params.SenderPaymentPubKey)
-	pubKey, err := btcec.ParsePubKey(publicKeyPayment)
-	if err != nil {
-		return nil, err
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: runesSenderAddressData.addrType.Bytes(), Value: senderIndexes})
+
+	switch feePayerAddressData.addrType {
+	case TaprootInputsHelpingKey:
+		feePayerAddressData.addrType = FeePayerTaprootInputsHelpingKey
+	case PaymentInputsHelpingKey:
+		feePayerAddressData.addrType = FeePayerPaymentInputsHelpingKey
 	}
 
-	witness, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pubKey.SerializeCompressed()), b.networkParams)
-	if err != nil {
-		return nil, err
+	feePayerIndexes := make([]byte, len(params.UsedBaseUTXOs))
+	for i, utxo := range params.UsedBaseUTXOs {
+		switch feePayerAddressData.addrType {
+		case FeePayerTaprootInputsHelpingKey:
+			p.Inputs[i].TaprootInternalKey = feePayerAddressData.publicKeyBytes
+		case FeePayerPaymentInputsHelpingKey:
+			p.Inputs[i].RedeemScript = feePayerAddressData.witnessProg
+		}
+		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
+		p.Inputs[i].SighashType = signHashType
+		feePayerIndexes[i] = byte(i)
 	}
 
-	witnessProg, err := txscript.PayToAddrScript(witness)
-	if err != nil {
-		return nil, err
-	}
-
-	baseUTXOIndexes := make([]byte, len(params.UsedBaseUTXOs))
-	for i := 0; i < len(params.UsedBaseUTXOs); i++ {
-		p.Inputs[i+runeUTXOs].WitnessUtxo = wire.NewTxOut(params.UsedBaseUTXOs[i].Amount.Int64(), params.UsedBaseUTXOs[i].Script)
-		p.Inputs[i+runeUTXOs].RedeemScript = witnessProg
-		p.Inputs[i+runeUTXOs].SighashType = signHashType
-		baseUTXOIndexes[i] = byte(i + runeUTXOs)
-	}
-
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: TaprootInputsHelpingKey.Bytes(), Value: runeUTXOIndexes})
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: PaymentInputsHelpingKey.Bytes(), Value: baseUTXOIndexes})
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerAddressData.addrType.Bytes(), Value: feePayerIndexes})
 
 	w := bytes.NewBuffer(nil)
 	err = p.Serialize(w)
@@ -390,7 +479,7 @@ func (b *TxBuilder) BuildBTCTransferTx(params BaseBTCTransferParams) (result Bui
 		psbtParams.FeePayerAddress = params.FeePayer.Address
 		psbtParams.FeePayerPubKey = params.FeePayer.PubKey
 	}
-	result.SerializedPSBT, err = b.BuildBTCTransferPSBT(psbtParams)
+	result.SerializedPSBT, err = b.buildBTCTransferPSBT(psbtParams)
 	if err != nil {
 		return result, err
 	}
@@ -565,9 +654,9 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	return result, nil
 }
 
-// BuildBTCTransferPSBT returns serialised PSBT from unsigned btc transferring transaction
+// buildBTCTransferPSBT returns serialised PSBT from unsigned btc transferring transaction
 // with indexes provided in Unknowns field defining indexes of inputs with different types.
-func (b *TxBuilder) BuildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]byte, error) {
+func (b *TxBuilder) buildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]byte, error) {
 	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
 	if err != nil {
 		return nil, err
@@ -626,6 +715,414 @@ func (b *TxBuilder) BuildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 		}
 
 		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerAddressData.addrType.Bytes(), Value: feePayerIndexes})
+	}
+
+	w := bytes.NewBuffer(nil)
+	err = p.Serialize(w)
+	if err != nil {
+		return nil, err
+	}
+
+	return w.Bytes(), nil
+}
+
+// BuildInscriptionTx constructs inscription commitment transaction in PSBT
+// format with inputs indexes assigned in unknown fields. Includes estimated
+// transaction fee for inscription reveal - etching transaction. Returns serialized
+// PSBT transaction with used base outputs, estimated fee in satoshi, and error if any.
+func (b *TxBuilder) BuildInscriptionTx(params BaseInscriptionTxParams) (result BuildInscriptionTxPSBTResult, _ error) {
+	buildBaseInscriptionTxResult, err := b.buildBaseInscriptionTx(params)
+	if err != nil {
+		return result, err
+	}
+
+	result.UsedBaseUTXOs = buildBaseInscriptionTxResult.UsedBaseUTXOs
+	result.EstimatedFee = buildBaseInscriptionTxResult.EstimatedFee
+
+	result.SerializedPSBT, err = b.buildInscriptionTxPSBT(BuildInscriptionTxPSBTParams{
+		BaseInscriptionTxResult: buildBaseInscriptionTxResult,
+		SenderAddress:           params.Sender.Address,
+		SenderPubKey:            params.Sender.PubKey,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// buildBaseTransferBTCTx constructs base btc transferring transaction.
+// Returns transaction, list of used base utxos pointers, estimated fee,
+// and error if any.
+//
+//	Tx struct
+//	inputs:
+//	┌─────────┬──────────────┬────────────────────────────────────────┐
+//	│  index  │     type     │             description                │
+//	├=========┼==============┼========================================┤
+//	│   0 - n │ base inputs  │ sender's utxos with bitcoin only,      │
+//	│         │              │ to transfer required amount of         │
+//	│         │              │ satoshi, to cover commit transaction   │
+//	│         │              │ fee and additional transaction fee for │
+//	│         │              │ reveal-etch transaction.               │
+//	└─────────┴──────────────┴────────────────────────────────────────┘
+//
+//	outputs:
+//	┌─────────┬──────────────┬────────────────────────────────────────┐
+//	│  index  │     type     │             description                │
+//	├=========┼==============┼========================================┤
+//	│       0 │ base output  │ mandatory, output to transfer bitcoin  │
+//	│         │              │ to created by inscription address.     │
+//	├─────────┼──────────────┼────────────────────────────────────────┤
+//	│       1 │ base output  │ service native commission. optional,   │
+//	│         │              │ charge commission from sender if       │
+//	│         │              │ satoshi commission amount is not 0.    │
+//	├─────────┼──────────────┼────────────────────────────────────────┤
+//	│       2 │ base output  │ outputs to change sender's bitcoins    │
+//	│         │              │ amount. 99% mandatory, in case         │
+//	│         │              │ any non-dust btc left.                 │
+//	└─────────┴──────────────┴────────────────────────────────────────┘
+func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (result BaseInscriptionTxResult, err error) {
+	if params.Sender == nil {
+		return result, errors.New("sender data is required")
+	}
+
+	var (
+		outputs                = 2 // inscription commitment + sender btc change.
+		satTransferAmount      = big.NewInt(0)
+		senderChange           = big.NewInt(0)
+		inscriptionAddress     string
+		inscriptionWitnessSize int
+		depositAmount          = big.NewInt(0)
+	)
+	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
+		outputs++ // internal commission.
+		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
+	}
+
+	inscriptionAddress, err = params.Inscription.IntoAddress(params.InscriptionBasePubKey, b.networkParams)
+	if err != nil {
+		return result, err
+	}
+
+	inscriptionWitnessSize, err = params.Inscription.VBytesSize()
+	if err != nil {
+		return result, err
+	}
+
+	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
+
+	depositAmount.Add(etchTransactionFee, satTransferAmount)
+	senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
+		Utxos:            params.Sender.UTXOs,
+		Inputs:           0,
+		Outputs:          outputs,
+		TransferAmount:   satTransferAmount,
+		SatoshiPerKVByte: params.SatoshiPerKVByte,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	bitcoinAmount := senderUTXOsResult.TotalAmount
+	senderChange.Sub(senderUTXOsResult.TotalAmount, depositAmount)
+	senderChange.Sub(senderChange, senderUTXOsResult.RoughEstimate)
+
+	tx := wire.NewMsgTx(txVersion)
+	for _, i := range senderUTXOsResult.UsedUTXOs {
+		utxoHash, err := chainhash.NewHashFromStr(i.TxHash)
+		if err != nil {
+			return result, err
+		}
+
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(utxoHash, i.Index), nil, nil))
+	}
+
+	// subtract fee.
+	bitcoinAmount.Sub(bitcoinAmount, senderUTXOsResult.RoughEstimate)
+
+	// inscription commitment output (#0).
+	err = b.addOutput(tx, depositAmount, bitcoinAmount, inscriptionAddress)
+	if err != nil {
+		return result, err
+	}
+
+	// service commission output (#1).
+	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
+		err = b.addOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.CommissionReceiverAddress)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	// sender's change btc output (#2).
+	if numbers.IsGreater(senderChange, nonDustBitcoinAmount) {
+		err = b.addOutput(tx, senderChange, bitcoinAmount, params.Sender.Address)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	result.UnsignedRawTx = tx
+	result.UsedBaseUTXOs = senderUTXOsResult.UsedUTXOs
+	result.EstimatedFee = senderUTXOsResult.RoughEstimate
+
+	return result, nil
+}
+
+// buildInscriptionTxPSBT returns serialised PSBT from unsigned inscription commitment transaction
+// with indexes provided in Unknowns field defining indexes of inputs with different types.
+func (b *TxBuilder) buildInscriptionTxPSBT(params BuildInscriptionTxPSBTParams) ([]byte, error) {
+	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
+	if err != nil {
+		return nil, err
+	}
+
+	senderAddressData, err := b.prepareAddressData(params.SenderPubKey, params.SenderAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	senderIndexes := make([]byte, len(params.UsedBaseUTXOs))
+	for i, utxo := range params.UsedBaseUTXOs {
+		switch senderAddressData.addrType {
+		case TaprootInputsHelpingKey:
+			p.Inputs[i].TaprootInternalKey = senderAddressData.publicKeyBytes
+		case PaymentInputsHelpingKey:
+			p.Inputs[i].RedeemScript = senderAddressData.witnessProg
+		}
+		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
+		p.Inputs[i].SighashType = signHashType
+		senderIndexes[i] = byte(i)
+	}
+
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: senderAddressData.addrType.Bytes(), Value: senderIndexes})
+
+	w := bytes.NewBuffer(nil)
+	err = p.Serialize(w)
+	if err != nil {
+		return nil, err
+	}
+
+	return w.Bytes(), nil
+}
+
+// BuildRuneEtchTx constructs inscription reveal - etch transaction in PSBT
+// format with inputs indexes assigned in unknown fields. Transaction fee will be
+// charged from inscription commitment utxo, if there won't be enough, the additional
+// payment data will be used to cover transaction fee. Returns serialized
+// PSBT transaction with used base outputs, estimated fee in satoshi, and error if any.
+func (b *TxBuilder) BuildRuneEtchTx(params BaseRuneEtchTxParams) (result BuildRuneEtchTxPSBTResult, _ error) {
+	buildBaseTransferRuneTxResult, err := b.buildRuneEtchTx(params)
+	if err != nil {
+		return result, err
+	}
+
+	result.UsedAdditionalBaseUTXOs = buildBaseTransferRuneTxResult.UsedAdditionalBaseUTXOs
+	result.EstimatedFee = buildBaseTransferRuneTxResult.EstimatedFee
+
+	inscriptionAddress, err := params.Inscription.IntoAddress(params.InscriptionReveal.PubKey, b.networkParams)
+	if err != nil {
+		return result, err
+	}
+
+	result.SerializedPSBT, err = b.buildRuneEtchTxPSBT(BuildRuneEtchTxPSBTParams{
+		BaseRuneEtchTxResult:      buildBaseTransferRuneTxResult,
+		InscriptionBasePubKey:     params.InscriptionReveal.PubKey,
+		InscriptionBaseAddress:    inscriptionAddress,
+		AdditionalPaymentsAddress: params.AdditionalPayments.Address,
+		AdditionalPaymentsPubKey:  params.AdditionalPayments.PubKey,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// buildBaseTransferBTCTx constructs base btc transferring transaction.
+// Returns transaction, list of used base utxos pointers, estimated fee,
+// and error if any.
+//
+//	Tx struct
+//	inputs:
+//	┌─────────┬──────────────┬────────────────────────────────────────┐
+//	│  index  │     type     │             description                │
+//	├=========┼==============┼========================================┤
+//	│       0 │ base output  │ mandatory, inscription commitment utxo │
+//	│         │              │ to reveal.                             │
+//	├─────────┼──────────────┼────────────────────────────────────────┤
+//	│   1 - n │ base inputs  │ additional payment utxos to cover      │
+//	│         │              │ transaction fee in case deposited to   │
+//	│         │              │ inscription address btc amount not     │
+//	│         │              │ enough to do that.                     │
+//	└─────────┴──────────────┴────────────────────────────────────────┘
+//
+//	outputs:
+//	┌─────────┬──────────────┬────────────────────────────────────────┐
+//	│  index  │     type     │             description                │
+//	├=========┼==============┼========================================┤
+//	│       0 │ runestone    │ rune protocol main output              │
+//	├─────────┼──────────────┼────────────────────────────────────────┤
+//	│       1 │ rune output  │ mandatory, output to link runes        │
+//	│         │              │ to recipient.                          │
+//	├─────────┼──────────────┼────────────────────────────────────────┤
+//	│       2 │ base output  │ outputs to change bitcoin amount.      │
+//	│         │              │ 99% mandatory, if any non-dust left.   │
+//	└─────────┴──────────────┴────────────────────────────────────────┘
+func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRuneEtchTxResult, err error) {
+	if params.InscriptionReveal == nil {
+		return result, errors.New("inscription reveal data is required")
+	}
+	if params.Inscription == nil {
+		return result, errors.New("inscription data is required")
+	}
+
+	var (
+		pointerValue           uint32 = 1
+		inscriptionWitnessSize int
+		prepareUTXOsResult     PrepareUTXOsResult
+	)
+	if len(params.InscriptionReveal.UTXOs) != 1 {
+		return result, errors.New("invalid inscription utxo data")
+	}
+
+	bitcoinAmount := params.InscriptionReveal.UTXOs[0].Amount
+
+	runestone := &runes.Runestone{
+		Etching: params.Rune,
+		Pointer: &pointerValue,
+	}
+
+	inscriptionWitnessSize, err = params.Inscription.VBytesSize()
+	if err != nil {
+		return result, err
+	}
+
+	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
+	if numbers.IsGreater(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount) {
+		if params.AdditionalPayments == nil {
+			return result, bitcoin.ErrInsufficientNativeBalance
+		}
+
+		prepareUTXOsResult, err = PrepareUTXOs(PrepareUTXOsParams{
+			Utxos:            params.AdditionalPayments.UTXOs,
+			Inputs:           1,
+			Outputs:          0,
+			TransferAmount:   new(big.Int).Sub(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount),
+			SatoshiPerKVByte: params.SatoshiPerKVByte,
+		})
+		if err != nil {
+			return result, err
+		}
+
+		bitcoinAmount.Add(bitcoinAmount, prepareUTXOsResult.TotalAmount)
+		etchTransactionFee.Add(etchTransactionFee, prepareUTXOsResult.RoughEstimate)
+	}
+
+	runestoneData, err := runestone.IntoScript()
+	if err != nil {
+		return result, err
+	}
+
+	tx := wire.NewMsgTx(txVersion)
+	for _, i := range append([]*bitcoin.UTXO{&params.InscriptionReveal.UTXOs[0]}, prepareUTXOsResult.UsedUTXOs...) {
+		utxoHash, err := chainhash.NewHashFromStr(i.TxHash)
+		if err != nil {
+			return result, err
+		}
+
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(utxoHash, i.Index), nil, nil))
+	}
+
+	// subtract fee.
+	bitcoinAmount.Sub(bitcoinAmount, etchTransactionFee)
+
+	// runestone output (#0).
+	tx.AddTxOut(wire.NewTxOut(0, runestoneData))
+
+	// recipient runes output (#1).
+	err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RunesRecipientAddress)
+	if err != nil {
+		return result, err
+	}
+
+	// change btc output (#2).
+	if numbers.IsPositive(bitcoinAmount) && numbers.IsGreater(bitcoinAmount, nonDustBitcoinAmount) {
+		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.SatoshiChangeAddress)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	result.UnsignedRawTx = tx
+	result.InscriptionReveal = params.Inscription
+	result.InscriptionUTXO = params.InscriptionReveal.UTXOs[0]
+	result.UsedAdditionalBaseUTXOs = prepareUTXOsResult.UsedUTXOs
+	result.EstimatedFee = etchTransactionFee
+
+	return result, nil
+}
+
+// buildRuneEtchTxPSBT returns serialised PSBT from unsigned inscription reveal - etch transaction
+// with indexes provided in Unknowns field defining indexes of inputs with different types.
+func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byte, error) {
+	p, err := psbt.NewFromUnsignedTx(params.UnsignedRawTx)
+	if err != nil {
+		return nil, err
+	}
+
+	inscriptionAddressData, err := b.prepareAddressData(params.InscriptionBasePubKey, params.InscriptionBaseAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	inscriptionScript, err := params.InscriptionReveal.IntoScriptForWitness(inscriptionAddressData.publicKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Figure out.
+	// tapLeaf := txscript.NewBaseTapLeaf(inscriptionScript)
+	// tapScriptTree := txscript.AssembleTaprootScriptTree(tapLeaf)
+	//
+	// ctrlBlock := tapScriptTree.LeafMerkleProofs[0].ToControlBlock(inscriptionAddressData.publicKeyBtcec)
+	// ctrlBlockBytes, err := ctrlBlock.ToBytes()
+	// if err != nil {
+	//	return nil, err
+	// }.
+
+	p.Inputs[0].SighashType = signHashType
+	p.Inputs[0].TaprootInternalKey = inscriptionAddressData.publicKeyBytes
+	p.Inputs[0].WitnessUtxo = wire.NewTxOut(params.InscriptionUTXO.Amount.Int64(), params.InscriptionUTXO.Script)
+	p.Inputs[0].WitnessScript = inscriptionScript
+	// TODO: Figure out.
+	// p.Inputs[0].TaprootLeafScript = []*psbt.TaprootTapLeafScript{{
+	//	ControlBlock: ctrlBlockBytes,
+	//	Script:       tapLeaf.Script,
+	//	LeafVersion:  tapLeaf.LeafVersion,
+	// }}.
+
+	if len(params.UsedAdditionalBaseUTXOs) != 0 {
+		additionalPaymentAddressData, err := b.prepareAddressData(params.AdditionalPaymentsPubKey, params.AdditionalPaymentsAddress)
+		if err != nil {
+			return nil, err
+		}
+
+		indexes := make([]byte, len(params.UsedAdditionalBaseUTXOs))
+		for i, utxo := range params.UsedAdditionalBaseUTXOs {
+			switch additionalPaymentAddressData.addrType {
+			case FeePayerTaprootInputsHelpingKey:
+				p.Inputs[i+1].TaprootInternalKey = additionalPaymentAddressData.publicKeyBytes
+			case FeePayerPaymentInputsHelpingKey:
+				p.Inputs[i+1].RedeemScript = additionalPaymentAddressData.witnessProg
+			}
+			p.Inputs[i+1].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
+			p.Inputs[i+1].SighashType = signHashType
+			indexes[i+1] = byte(i + 1)
+		}
+
+		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: additionalPaymentAddressData.addrType.Bytes(), Value: indexes})
 	}
 
 	w := bytes.NewBuffer(nil)
@@ -780,6 +1277,25 @@ func RoughTxSizeEstimate(inputs, outputs int) *big.Int {
 	size.Add(size, new(big.Int).Mul(outputSizeVBytes, big.NewInt(int64(outputs))))
 
 	return size
+}
+
+// RoughEtchFeeEstimate returns etch transaction rough estimate in satoshi.
+// TODO: increase precision.
+func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int) (etchTransactionFee *big.Int) {
+	// INFO:
+	// header: static value [vB]
+	// inputs: inscription witness data + raw inscription input size [vB]
+	// outputs: runes protocol, runes recipient, btc change [vB]
+	// (header + inputs + outputs) * fee rate / 1000 = tx fee in satoshi
+	// [vB] * 1000 [sat/vB] / 1000 = sat.
+	//
+	// estimate runes protocol as maximum possible (3 * simple output ~ 80-90 vB).
+	etchTransactionFee = new(big.Int).Add(inscriptionInputSizeVBytes, inscriptionWitnessSize) // inputs [vB].
+	etchTransactionFee.Add(etchTransactionFee, RoughTxSizeEstimate(0, 3+2))                   // outputs + header [vB].
+	etchTransactionFee.Mul(etchTransactionFee, satoshiPerKVByte)                              // multiply by fee rate [vB * 1000(sat/vB)].
+	etchTransactionFee.Div(etchTransactionFee, big.NewInt(1000))                              // reduce kilo value [sat].
+
+	return etchTransactionFee
 }
 
 // SelectUTXO is a partly greedy selection algorithm for UTXOs with 'requiredUTXOs' parameter.

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
@@ -225,6 +226,77 @@ func TestInscription(t *testing.T) {
 			inscription, err := inscriptions.ParseInscriptionFromWitnessData(data)
 			require.ErrorIs(t, err, test.err)
 			require.EqualValues(t, test.expected, inscription)
+		}
+	})
+
+	t.Run("IntoAddress", func(t *testing.T) {
+		rune1, err := runes.NewRuneFromString("HELLO")
+		require.NoError(t, err)
+
+		chainParams := &chaincfg.TestNet3Params
+		tests := []struct {
+			publicKey   string
+			inscription *inscriptions.Inscription
+			expected    string
+		}{
+			{
+				"02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+				&inscriptions.Inscription{
+					Rune: rune1,
+					Body: []byte("test data"),
+				},
+				"tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+			},
+			{
+				"04f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa2a8bc487864eeaef71e16cf1c0d15035faeba1976a7879d7de91e2b7acde0846",
+				&inscriptions.Inscription{
+					Rune: rune1,
+					Body: []byte("test data"),
+				},
+				"tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+			},
+			{
+				"04f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa2a8bc487864eeaef71e16cf1c0d15035faeba1976a7879d7de91e2b7acde0846",
+				&inscriptions.Inscription{
+					ContentType: "image/png",
+					Rune:        rune_,
+					Body:        make([]byte, 2048),
+				},
+				"tb1p24rs4z6ruqhgaq2243uq84jgup736sm4zznlcl3xfvakzdh7yyeqme4d53",
+			},
+		}
+		for _, test := range tests {
+			address, err := test.inscription.IntoAddress(test.publicKey, chainParams)
+			require.NoError(t, err)
+			require.EqualValues(t, test.expected, address)
+		}
+	})
+
+	t.Run("VBytesSize", func(t *testing.T) {
+		tests := []struct {
+			inscription *inscriptions.Inscription
+			expected    int
+		}{
+			{
+				&inscriptions.Inscription{
+					Rune: rune_,
+					Body: []byte("test data"),
+				},
+				15,
+			},
+			{
+				&inscriptions.Inscription{
+					ContentType: "image/png",
+					Rune:        rune_,
+					Body:        make([]byte, 2048),
+				},
+				531,
+			},
+		}
+		for _, test := range tests {
+			size, err := test.inscription.VBytesSize()
+			require.NoError(t, err)
+			require.EqualValues(t, test.expected, size)
 		}
 	})
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
 )
@@ -96,36 +97,40 @@ func TestTxBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildRuneTransferTx", func(t *testing.T) {
-		expectedTxB64 := "cHNidP8BAPICAAAAAkZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////RlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcCAAAAAP////8EAAAAAAAAAAAMal0JFgIA4ghNnRoBIgIAAAAAAAAiUSAu6vu/kq8tH14IZsvr1he5lWJfN2J6Y4yQTd0mhUTDECICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQb8AwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEQAQABIAEBAAEBKiICAAAAAAAAIV9iaXRjb2luX3RyYW5zYWN0aW9uX3J1bmVfc2NyaXB0XwEDBAEAAAABFyAp+mEcNhNVsILuWT/rNoAJqpxr0e02yZg+3NET+42jPwABASVQ+AwAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEEFgAU8+s8RTsBFB5gK+stEzX2vlB7gTgAAAAAAA=="
+		expectedTxB64 := "cHNidP8BAPICAAAAAkZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////RlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcCAAAAAP////8EAAAAAAAAAAAMal0JFgIA4ghNnRoBIgIAAAAAAAAiUSAu6vu/kq8tH14IZsvr1he5lWJfN2J6Y4yQTd0mhUTDECICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQb8AwAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAEQAQABEQEAAAEBJVD4DAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAARcg0XZhuBTfrz99bnDo1Mj15v2+eAosA3PdBsp9ddwZ+L4AAAAAAAA="
 		runeID := runes.RuneID{Block: 1122, TxID: 77}
 		result, err := txBuilder.BuildRunesTransferTx(txbuilder.BaseRunesTransferParams{
 			RuneID: runeID,
-			RuneUTXOs: []bitcoin.UTXO{
-				{
-					TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-					Index:   4,
-					Amount:  big.NewInt(546),
-					Script:  []byte("_bitcoin_transaction_rune_script_"),
-					Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
-					Runes:   []bitcoin.RuneUTXO{{RuneID: runeID, Amount: big.NewInt(7726)}},
+			RunesSender: &txbuilder.PaymentData{
+				UTXOs: []bitcoin.UTXO{
+					{
+						TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+						Index:   4,
+						Amount:  big.NewInt(546),
+						Script:  []byte("_bitcoin_transaction_rune_script_"),
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						Runes:   []bitcoin.RuneUTXO{{RuneID: runeID, Amount: big.NewInt(7726)}},
+					},
 				},
+				Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+				PubKey:  "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
 			},
-			BaseUTXOs: []bitcoin.UTXO{
-				{
-					TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
-					Index:   2,
-					Amount:  big.NewInt(850000), // 0.0085 BTC.
-					Script:  []byte("_bitcoin_transaction_script_"),
-					Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+			FeePayer: &txbuilder.PaymentData{
+				UTXOs: []bitcoin.UTXO{
+					{
+						TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+						Index:   2,
+						Amount:  big.NewInt(850000), // 0.0085 BTC.
+						Script:  []byte("_bitcoin_transaction_script_"),
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					},
 				},
+				Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+				PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
 			},
-			TransferRuneAmount:      big.NewInt(3357),
-			SatoshiPerKVByte:        big.NewInt(5000), // 5 sat/vB.
-			RecipientTaprootAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
-			SenderTaprootAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
-			SenderPaymentAddress:    "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
-			SenderTaprootPubKey:     "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
-			SenderPaymentPubKey:     "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+			TransferRuneAmount:    big.NewInt(3357),
+			SatoshiPerKVByte:      big.NewInt(5000), // 5 sat/vB.
+			RunesRecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
 		})
 		require.NoError(t, err)
 		require.EqualValues(t, expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
@@ -247,4 +252,116 @@ func TestTxBuilder(t *testing.T) {
 			require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
 		}
 	})
+
+	t.Run("BuildBaseInscriptionTx", func(t *testing.T) {
+		rune_, err := runes.NewRuneFromString("HELLO")
+		require.NoError(t, err)
+
+		tests := []struct {
+			expectedTxB64 string
+			params        txbuilder.BaseInscriptionTxParams
+		}{
+			{
+				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////AqEEAAAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZWyYQAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJXhpAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
+				txbuilder.BaseInscriptionTxParams{
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					InscriptionBasePubKey: "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+				},
+			},
+		}
+		for _, test := range tests {
+			result, err := txBuilder.BuildInscriptionTx(test.params)
+			require.NoError(t, err)
+			require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
+		}
+	})
+
+	t.Run("BuildRuneEtchTx", func(t *testing.T) {
+		rune_, err := runes.NewRuneFromString("HELLO")
+		require.NoError(t, err)
+
+		tests := []struct {
+			expectedTxB64 string
+			params        txbuilder.BaseRuneEtchTxParams
+		}{
+			{
+				"cHNidP8BAJ8CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AwAAAAAAAAAAGGpdFQEFAgEDJQS+geUBBV0GgJTr3AMWASICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmSN8QwAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAAAAQElAAAAAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABBTog9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/qsAGMDb3JkAQ0DvkA5AAl0ZXN0IGRhdGFoARcg9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/oAAAAA",
+				txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					AdditionalPayments: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					SatoshiPerKVByte:      big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:  "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+				},
+			},
+		}
+		for _, test := range tests {
+			result, err := txBuilder.BuildRuneEtchTx(test.params)
+			require.NoError(t, err)
+			require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
+		}
+	})
+}
+
+func toPointer[T any](val T) *T {
+	return &val
 }

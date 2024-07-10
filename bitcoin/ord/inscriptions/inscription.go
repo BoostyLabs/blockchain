@@ -9,6 +9,10 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
@@ -297,4 +301,53 @@ func (i *Inscription) IntoScriptForWitness(serializedPubKey []byte) ([]byte, err
 	}
 
 	return append(script, inscription...), nil
+}
+
+// IntoAddress returns generated address from inscription script data.
+func (i *Inscription) IntoAddress(publicKey string, chainParams *chaincfg.Params) (string, error) {
+	pubKey, err := hex.DecodeString(publicKey)
+	if err != nil {
+		return "", err
+	}
+
+	pubKeyBtcec, err := btcec.ParsePubKey(pubKey)
+	if err != nil {
+		return "", err
+	}
+
+	serializedPubKey := schnorr.SerializePubKey(pubKeyBtcec)
+	pkScript, err := i.IntoScriptForWitness(serializedPubKey)
+	if err != nil {
+		return "", err
+	}
+
+	tapLeaf := txscript.NewBaseTapLeaf(pkScript)
+	tapScriptTree := txscript.AssembleTaprootScriptTree(tapLeaf)
+	tapScriptRootHash := tapScriptTree.RootNode.TapHash()
+	outputKey := txscript.ComputeTaprootOutputKey(pubKeyBtcec, tapScriptRootHash[:])
+
+	addr, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(outputKey), chainParams)
+	if err != nil {
+		return "", err
+	}
+
+	return addr.String(), nil
+}
+
+// VBytesSize returns estimated inscription input size in virtual bytes.
+func (i *Inscription) VBytesSize() (int, error) {
+	script, err := i.IntoScript()
+	if err != nil {
+		return 0, err
+	}
+
+	// INFO: pubkey size [1 byte] + pubkey [32 bytes] + OP_CHECKSIG [1 byte] + inscription script size [variable].
+	bytesSize := len(script) + 34
+	// INFO: use ceil approach.
+	vBytesSize := bytesSize / 4
+	if bytesSize%4 != 0 {
+		vBytesSize++
+	}
+
+	return vBytesSize, nil
 }
