@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 func TestRunes(t *testing.T) {
@@ -49,7 +50,6 @@ func TestRunes(t *testing.T) {
 			{big.NewInt(27), "AB"},
 			{big.NewInt(51), "AZ"},
 			{big.NewInt(52), "BA"},
-			{runes.MaxU128, "BCGDENLQRQWDSLRUGSNLBTMFIJAV"},
 		}
 		for _, test := range tests {
 			runeFromStr, err := runes.NewRuneFromString(test.str)
@@ -61,10 +61,21 @@ func TestRunes(t *testing.T) {
 		}
 	})
 
+	t.Run("MaxUInt128 name", func(t *testing.T) {
+		val := big.NewInt(20)
+		rune_, err := runes.NewRuneFromNumber(val)
+		require.NoError(t, err)
+
+		val.Set(numbers.MaxUInt128Value)
+
+		require.EqualValues(t, "BCGDENLQRQWDSLRUGSNLBTMFIJAV", rune_.String())
+	})
+
 	t.Run("NewRuneFromString", func(t *testing.T) {
 		var (
 			errSymb         = errors.New("invalid symbol in the rune")
 			errU128Overflow = errors.New("value overflows uint128")
+			errReserved     = errors.New("reserved name")
 		)
 		tests := []struct {
 			str string
@@ -82,6 +93,7 @@ func TestRunes(t *testing.T) {
 			{"OR2V", errSymb},
 			{"123", errSymb},
 			{"ABCDEFGHIJKLMNOPQRSTUVWXYZ", nil},
+			{"ABACDEFGHIJKLMNOPQRSTUVWXYZ", errReserved},      // > AAAAAAAAAAAAAAAAAAAAAAAAAAA.
 			{"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZ", errU128Overflow}, // uint128 overflow.
 		}
 		for _, test := range tests {
@@ -127,6 +139,31 @@ func TestRunes(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, test.expectedRune, rune_.StringWithSeparator(test.spacers, test.spacer), test.rawRune)
 		}
+	})
 
+	t.Run("RuneReserve", func(t *testing.T) {
+		tests := []struct {
+			block    uint64
+			tx       uint32
+			expected string
+		}{
+			{0, 0, "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+			{0, 1, "AAAAAAAAAAAAAAAAAAAAAAAAAAB"},
+			{100, 1, "AAAAAAAAAAAAAAAAAACBMITDVSR"},
+			{1<<64 - 1, 1<<32 - 1, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ"},
+		}
+		for _, test := range tests {
+			require.EqualValues(t, test.expected, runes.RuneReserve(runes.RuneID{Block: test.block, TxID: test.tx}).String())
+		}
+	})
+
+	t.Run("RuneReserve", func(t *testing.T) {
+		tests := []struct {
+			block    uint64
+			expected int
+		}{{0, 13}, {839999, 13}, {840000, 12}, {857499, 12}, {857500, 11}, {1032500, 1}, {1050000, 0}, {1050001, 0}}
+		for _, test := range tests {
+			require.EqualValues(t, test.expected, runes.MinNameLength(test.block), "%d -> %d", test.block, test.expected)
+		}
 	})
 }

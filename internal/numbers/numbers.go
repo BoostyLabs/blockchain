@@ -10,6 +10,9 @@ import (
 // Zero defines 0 number.
 const Zero = 0
 
+// ZeroBigInt defies 0 as *big.Int type.
+var ZeroBigInt = big.NewInt(0)
+
 // OneBigInt defies 1 as *big.Int type.
 var OneBigInt = big.NewInt(1)
 

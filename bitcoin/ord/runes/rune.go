@@ -6,19 +6,31 @@ package runes
 import (
 	"errors"
 	"math/big"
+
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 // DefaultSpacer defines default spacer for Rune name.
 const DefaultSpacer = "•"
 
+const (
+	// ProtocolBlockStart defines the block when protocol was launched.
+	ProtocolBlockStart uint64 = 840_000
+	// UnlockNamePeriod defines interval in blocks to unlock shorter name.
+	UnlockNamePeriod uint64 = 17_500
+
+	// StartNameLength defines minimum name length on the ProtocolBlockStart.
+	StartNameLength = 13
+)
+
 // base26 defines 26 as *big.Int.
 var base26 = big.NewInt(26)
 
-// one predefines one as *big.Int.
-var one = big.NewInt(1)
+// FirstReservedRuneNameInt defines FirstReservedRuneName as number.
+var FirstReservedRuneNameInt, _ = new(big.Int).SetString("6402364363415443603228541259936211926", 10)
 
-// MaxU128 defines maximum value of uint128 integer type.
-var MaxU128 = new(big.Int).Sub(new(big.Int).Lsh(one, 128), one)
+// FirstReservedRuneName defines first reserved rune name AAAAAAAAAAAAAAAAAAAAAAAAAAA.
+var FirstReservedRuneName = RuneReserve(RuneID{0, 0})
 
 // intToChar defines conversion rules from integers to chars.
 var intToChar = map[int64]byte{
@@ -61,7 +73,7 @@ func NewRuneFromString(runeStr string) (*Rune, error) {
 	var value = big.NewInt(0)
 	for i, c := range runeStr {
 		if i > 0 {
-			value.Add(value, one)
+			value.Add(value, numbers.OneBigInt)
 		}
 		value = value.Mul(value, base26)
 		if c < 'A' || c > 'Z' {
@@ -70,8 +82,11 @@ func NewRuneFromString(runeStr string) (*Rune, error) {
 		value = value.Add(value, big.NewInt(int64(c)-'A'))
 	}
 
-	if value.Cmp(MaxU128) > 0 {
+	if numbers.IsGreater(value, numbers.MaxUInt128Value) {
 		return nil, errors.New("value overflows uint128")
+	}
+	if numbers.IsGreater(value, FirstReservedRuneNameInt) {
+		return nil, errors.New("reserved name")
 	}
 
 	return &Rune{value: value}, nil
@@ -79,8 +94,11 @@ func NewRuneFromString(runeStr string) (*Rune, error) {
 
 // NewRuneFromNumber creates new Rune from number.
 func NewRuneFromNumber(number *big.Int) (*Rune, error) {
-	if number.Cmp(MaxU128) > 0 || number.Sign() < 0 {
+	if numbers.IsGreater(number, numbers.MaxUInt128Value) || number.Sign() < 0 {
 		return nil, errors.New("invalid number")
+	}
+	if !numbers.IsLess(number, FirstReservedRuneNameInt) {
+		return nil, errors.New("reserved name")
 	}
 
 	return &Rune{value: number}, nil
@@ -94,14 +112,14 @@ func (r *Rune) Value() *big.Int {
 // String returns Rune name as string.
 func (r *Rune) String() string {
 	var value = new(big.Int).Set(r.value)
-	if value.Cmp(MaxU128) == 0 {
+	if numbers.IsEqual(value, numbers.MaxUInt128Value) {
 		return "BCGDENLQRQWDSLRUGSNLBTMFIJAV"
 	}
 
-	value = value.Add(value, one)
+	value = value.Add(value, numbers.OneBigInt)
 	var symbol string
 	for value.Sign() > 0 {
-		valueSubOne := new(big.Int).Sub(value, one)
+		valueSubOne := new(big.Int).Sub(value, numbers.OneBigInt)
 		idx := new(big.Int).Mod(valueSubOne, base26)
 
 		symbol = string(intToChar[idx.Int64()]) + symbol
@@ -131,4 +149,29 @@ func (r *Rune) StringWithSeparator(spacers uint32, spacer string) string {
 	}
 
 	return symbol
+}
+
+// RuneReserve returns allocated rune name in case it was omitted in etching.
+func RuneReserve(runeID RuneID) *Rune {
+	// INFO: [Rust impl] 6402364363415443603228541259936211926 + (u128::from(block) << 32 | u128::from(tx))
+	reservedName := new(big.Int).Add(FirstReservedRuneNameInt, new(big.Int).Or(
+		new(big.Int).Lsh(big.NewInt(int64(runeID.Block)), 32),
+		big.NewInt(int64(runeID.TxID))))
+
+	return &Rune{value: reservedName}
+}
+
+// MinNameLength returns unlocked rune name length depending on block.
+func MinNameLength(currentBlock uint64) int {
+	if currentBlock < ProtocolBlockStart {
+		return StartNameLength
+	}
+
+	for i := uint64(1); i < StartNameLength; i++ {
+		if ProtocolBlockStart+UnlockNamePeriod*(i-1) <= currentBlock && currentBlock < ProtocolBlockStart+UnlockNamePeriod*i {
+			return StartNameLength - int(i)
+		}
+	}
+
+	return 0
 }
