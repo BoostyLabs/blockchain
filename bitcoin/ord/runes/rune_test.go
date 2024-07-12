@@ -102,42 +102,94 @@ func TestRunes(t *testing.T) {
 		}
 	})
 
+	t.Run("NewRuneFromStringWithSpacer", func(t *testing.T) {
+		var (
+			rune_  *runes.Rune
+			spacer uint32
+			err    error
+		)
+		tests := []struct {
+			runeWithSpacer string
+			spacer         rune
+			spacers        uint32
+			expectedRune   string
+		}{
+			{
+				runeWithSpacer: "ABC_DEF_GHI_JKL_MNO_PQR_STU_VWX_YZ",
+				spacer:         '_',
+				spacers:        0b00000000_10010010_01001001_00100100,
+				expectedRune:   "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			},
+			{
+				runeWithSpacer: "ABC•DEF•GHI•JKL•MNO•PQR•STU•VWX•YZ",
+				spacers:        0b00000000_10010010_01001001_00100100,
+				expectedRune:   "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			},
+			{
+				runeWithSpacer: "HELLO TEST RUNE",
+				spacer:         ' ',
+				spacers:        0b00000000_00000000_00000001_00010000,
+				expectedRune:   "HELLOTESTRUNE",
+			},
+			{
+				runeWithSpacer: "HE\\LLO\\TEST\\RUN\\E",
+				spacer:         '\\',
+				spacers:        0b00000000_00000000_00001001_00010010,
+				expectedRune:   "HELLOTESTRUNE",
+			},
+		}
+		for _, test := range tests {
+			if test.spacer == 0 {
+				rune_, spacer, err = runes.NewRuneFromStringWithSpacer(test.runeWithSpacer)
+			} else {
+				rune_, spacer, err = runes.NewRuneFromStringWithSpacer(test.runeWithSpacer, test.spacer)
+			}
+			require.NoError(t, err)
+			require.EqualValues(t, test.spacers, spacer)
+			require.EqualValues(t, test.expectedRune, rune_.String(), test.expectedRune)
+			require.EqualValues(t, test.expectedRune, rune_.String(), test.expectedRune)
+		}
+	})
+
 	t.Run("StringWithSeparator", func(t *testing.T) {
 		tests := []struct {
 			rawRune      string
-			spacer       string
+			spacer       rune
 			spacers      uint32
 			expectedRune string
 		}{
 			{
 				rawRune:      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-				spacer:       "_",
+				spacer:       '_',
 				spacers:      0b00000000_10010010_01001001_00100100,
 				expectedRune: "ABC_DEF_GHI_JKL_MNO_PQR_STU_VWX_YZ",
 			},
 			{
 				rawRune:      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-				spacer:       "",
 				spacers:      0b00000000_10010010_01001001_00100100,
 				expectedRune: "ABC•DEF•GHI•JKL•MNO•PQR•STU•VWX•YZ",
 			},
 			{
 				rawRune:      "HELLOTESTRUNE",
-				spacer:       " ",
-				spacers:      0b00000000_00000000_00010001_00010000,
+				spacer:       ' ',
+				spacers:      0b00000000_00000000_00000001_00010000,
 				expectedRune: "HELLO TEST RUNE",
 			},
 			{
 				rawRune:      "HELLOTESTRUNE",
-				spacer:       "\\/",
-				spacers:      0b00000000_00000000_00010001_00010000,
-				expectedRune: "HELLO\\/TEST\\/RUNE",
+				spacer:       '\\',
+				spacers:      0b00000000_00000000_00001001_00010010,
+				expectedRune: "HE\\LLO\\TEST\\RUN\\E",
 			},
 		}
 		for _, test := range tests {
 			rune_, err := runes.NewRuneFromString(test.rawRune)
 			require.NoError(t, err)
-			require.EqualValues(t, test.expectedRune, rune_.StringWithSeparator(test.spacers, test.spacer), test.rawRune)
+			if test.spacer == 0 {
+				require.EqualValues(t, test.expectedRune, rune_.StringWithSeparator(test.spacers), test.rawRune)
+			} else {
+				require.EqualValues(t, test.expectedRune, rune_.StringWithSeparator(test.spacers, test.spacer), test.rawRune)
+			}
 		}
 	})
 

@@ -6,12 +6,13 @@ package runes
 import (
 	"errors"
 	"math/big"
+	"strings"
 
 	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 // DefaultSpacer defines default spacer for Rune name.
-const DefaultSpacer = "•"
+const DefaultSpacer = '•'
 
 const (
 	// ProtocolBlockStart defines the block when protocol was launched.
@@ -68,7 +69,7 @@ type Rune struct {
 }
 
 // NewRuneFromString creates new Rune from string name.
-// TODO: Add constructor for Rune name with spacer.
+// NOTE: Valid symbols are A-Z only.
 func NewRuneFromString(runeStr string) (*Rune, error) {
 	var value = big.NewInt(0)
 	for i, c := range runeStr {
@@ -90,6 +91,44 @@ func NewRuneFromString(runeStr string) (*Rune, error) {
 	}
 
 	return &Rune{value: value}, nil
+}
+
+// NewRuneFromStringWithSpacer creates new Rune from string name with spacers scanned.
+//
+//	NOTE:
+//	- Instead of empty spacer the default one will be used.
+//	- If many spacers were provided, the first one will be used.
+func NewRuneFromStringWithSpacer(runeStr string, spacer ...rune) (*Rune, uint32, error) {
+	var s = DefaultSpacer
+	if len(spacer) > 0 {
+		s = spacer[0]
+	}
+
+	var (
+		spacers uint32
+		idx     uint
+	)
+	for _, char := range runeStr {
+		if char == s {
+			spacers |= 1 << (idx - 1)
+		} else {
+			idx++
+		}
+	}
+
+	runeStr = strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r
+		}
+
+		return -1
+	}, runeStr)
+	rune_, err := NewRuneFromString(runeStr)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return rune_, spacers, nil
 }
 
 // NewRuneFromNumber creates new Rune from number.
@@ -131,12 +170,16 @@ func (r *Rune) String() string {
 }
 
 // StringWithSeparator returns Rune name as string with provides spacer.
-// If spacer is an empty strung, DefaultSpacer will be used.
-func (r *Rune) StringWithSeparator(spacers uint32, spacer string) string {
+//
+//	NOTE:
+//	- Instead of empty spacer the default one will be used.
+//	- If many spacers were provided, the first one will be used.
+func (r *Rune) StringWithSeparator(spacers uint32, spacer ...rune) string {
 	rune_ := r.String()
 
-	if spacer == "" {
-		spacer = DefaultSpacer
+	var s = string(DefaultSpacer)
+	if len(spacer) > 0 {
+		s = string(spacer[0])
 	}
 
 	symbol := ""
@@ -144,7 +187,7 @@ func (r *Rune) StringWithSeparator(spacers uint32, spacer string) string {
 		symbol += string(char)
 
 		if idx < len(rune_)-1 && spacers&(1<<idx) != 0 {
-			symbol += spacer
+			symbol += s
 		}
 	}
 
