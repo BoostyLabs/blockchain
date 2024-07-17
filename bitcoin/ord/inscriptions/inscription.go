@@ -24,7 +24,7 @@ import (
 var ErrMalformedInscription = errors.New("inscription is malformed")
 
 // ErrRepeatedFieldData defines that already filled field met while parsing.
-var ErrRepeatedFieldData = errors.New("field already field")
+var ErrRepeatedFieldData = errors.New("field already filled")
 
 // inscriptionOrdTag defines ord tag for inscription to disambiguate inscriptions from other uses of envelopes.
 const inscriptionOrdTag string = "ord"
@@ -101,6 +101,8 @@ func ParseInscriptionFromWitnessData(data []byte) (*Inscription, error) {
 		tag, _ := sr.Next() // skip error due to the loop condition check.
 		if tag == "0" {     // OP_0, means that all next data pushes are body parts.
 			err = inscription.fillBody(sr)
+		} else if tag == inscriptionEndDisASM {
+			return inscription, nil
 		} else {
 			var value string
 			value, err = sr.Next()
@@ -140,9 +142,12 @@ func (i *Inscription) fillBody(sr *sequencereader.SequenceReader[string]) (err e
 
 // fillFieldByTag fills Inscription fields by provided tag.
 func (i *Inscription) fillFieldByTag(tag string, value string) (err error) {
-	valueBytes, err := hex.DecodeString(value)
-	if err != nil {
-		return err
+	var valueBytes = make([]byte, 0)
+	if value != "0" {
+		valueBytes, err = hex.DecodeString(value)
+		if err != nil {
+			return err
+		}
 	}
 
 	switch tag {
@@ -159,7 +164,7 @@ func (i *Inscription) fillFieldByTag(tag string, value string) (err error) {
 
 		i.Pointer = new(big.Int).SetBytes(reverse.Bytes(valueBytes))
 	case TagParent.HexString():
-		id, err := NewIDFromString(string(valueBytes))
+		id, err := NewIDFromDataPush(valueBytes)
 		if err != nil {
 			return err
 		}
@@ -188,7 +193,7 @@ func (i *Inscription) fillFieldByTag(tag string, value string) (err error) {
 			return ErrRepeatedFieldData
 		}
 
-		i.Delegate, err = NewIDFromString(string(valueBytes))
+		i.Delegate, err = NewIDFromDataPush(valueBytes)
 		if err != nil {
 			return err
 		}

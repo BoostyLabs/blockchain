@@ -5,9 +5,11 @@ package inscriptions_test
 
 import (
 	"encoding/hex"
+	"math/big"
 	"testing"
 
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
@@ -163,6 +165,9 @@ func TestInscription(t *testing.T) {
 	})
 
 	t.Run("ParseInscriptionFromWitnessData", func(t *testing.T) {
+		rune2, err := runes.NewRuneFromString("DOGGOTOTHEMOON")
+		require.NoError(t, err)
+
 		tests := []struct {
 			dataHex  string
 			expected *inscriptions.Inscription
@@ -200,6 +205,15 @@ func TestInscription(t *testing.T) {
 					ContentType: "image/png",
 					Rune:        rune_,
 					Body:        make([]byte, 2048),
+				},
+				nil,
+			},
+			{
+				"20658204e3f80250f45924140b103ea13c6ae9e3186f49af92027453a6fa7b1113ac0063036f7264010b205f83846783d4a3a733b68c4f5e77fd4d421c7a18417856c76695e1234efb8f61010200010d0887d0100e5cdff79d68",
+				&inscriptions.Inscription{
+					Delegate: &inscriptions.ID{TxID: mustHash(t, "618ffb4e23e19566c7567841187a1c424dfd775e4f8cb633a7a3d4836784835f"), Index: 0},
+					Pointer:  big.NewInt(0),
+					Rune:     rune2,
 				},
 				nil,
 			},
@@ -299,4 +313,11 @@ func TestInscription(t *testing.T) {
 			require.EqualValues(t, test.expected, size)
 		}
 	})
+}
+
+func mustHash(t *testing.T, hash string) *chainhash.Hash {
+	h, err := chainhash.NewHashFromStr(hash)
+	require.NoError(t, err)
+
+	return h
 }

@@ -4,8 +4,10 @@
 package inscriptions_test
 
 import (
+	"encoding/hex"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
@@ -28,6 +30,40 @@ func TestID(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+			}
+		}
+	})
+
+	t.Run("NewIDFromDataPush", func(t *testing.T) {
+		tx, err := hex.DecodeString("521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79da")
+		require.NoError(t, err)
+
+		txID, err := chainhash.NewHash(tx)
+		require.NoError(t, err)
+
+		tests := []struct {
+			value    string
+			invalid  bool
+			expected *inscriptions.ID
+		}{
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79daff", false, &inscriptions.ID{TxID: txID, Index: 255}},
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79daff00", false, &inscriptions.ID{TxID: txID, Index: 255}},
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79da0001", false, &inscriptions.ID{TxID: txID, Index: 256}},
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79da", false, &inscriptions.ID{TxID: txID, Index: 0}},
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c", true, nil},
+			{"521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79daffffffffff", true, nil},
+		}
+		for _, test := range tests {
+			data, err := hex.DecodeString(test.value)
+			require.NoError(t, err)
+
+			i, err := inscriptions.NewIDFromDataPush(data)
+			if test.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.EqualValues(t, test.expected.TxID, i.TxID)
+				require.EqualValues(t, test.expected.Index, i.Index)
 			}
 		}
 	})

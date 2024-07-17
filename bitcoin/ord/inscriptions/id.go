@@ -45,6 +45,23 @@ func NewIDFromString(idStr string) (*ID, error) {
 	return &ID{TxID: txID, Index: uint32(index)}, nil
 }
 
+// NewIDFromDataPush parses inscription ID from script data push.
+func NewIDFromDataPush(id []byte) (*ID, error) {
+	if len(id) < chainhash.HashSize || len(id) > chainhash.HashSize+4 {
+		return nil, fmt.Errorf("invalid TxID format: %x", id)
+	}
+
+	txID, err := chainhash.NewHash(id[:chainhash.HashSize])
+	if err != nil {
+		return nil, err
+	}
+
+	var index = make([]byte, 4)
+	copy(index, id[chainhash.HashSize:])
+
+	return &ID{TxID: txID, Index: binary.LittleEndian.Uint32(index)}, nil
+}
+
 // String returns inscription ID as string.
 func (id *ID) String() string {
 	return fmt.Sprintf("%s%s%d", id.TxID.String(), idSeparator, id.Index)
