@@ -202,6 +202,7 @@ func (i *Inscription) fillFieldByTag(tag string, value string) (err error) {
 		if err != nil {
 			return err
 		}
+	case TagNote.HexString(), TagNop.HexString(), TagUnbound.HexString():
 	default:
 		return ErrMalformedInscription
 	}
