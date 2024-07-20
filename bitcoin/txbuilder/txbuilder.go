@@ -790,7 +790,6 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	var (
 		outputs                = 2 // inscription commitment + sender btc change.
 		satTransferAmount      = big.NewInt(0)
-		senderChange           = big.NewInt(0)
 		inscriptionAddress     string
 		inscriptionWitnessSize int
 		depositAmount          = big.NewInt(0)
@@ -825,8 +824,6 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}
 
 	bitcoinAmount := senderUTXOsResult.TotalAmount
-	senderChange.Sub(senderUTXOsResult.TotalAmount, depositAmount)
-	senderChange.Sub(senderChange, senderUTXOsResult.RoughEstimate)
 
 	tx := wire.NewMsgTx(txVersion)
 	for _, i := range senderUTXOsResult.UsedUTXOs {
@@ -856,8 +853,8 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}
 
 	// sender's change btc output (#2).
-	if numbers.IsGreater(senderChange, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, senderChange, bitcoinAmount, params.Sender.Address)
+	if numbers.IsGreater(bitcoinAmount, nonDustBitcoinAmount) {
+		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.Sender.Address)
 		if err != nil {
 			return result, err
 		}
@@ -940,7 +937,7 @@ func (b *TxBuilder) BuildRuneEtchTx(params BaseRuneEtchTxParams) (result BuildRu
 	return result, nil
 }
 
-// buildBaseTransferBTCTx constructs base btc transferring transaction.
+// buildRuneEtchTx constructs base rune etching transaction.
 // Returns transaction, list of used base utxos pointers, estimated fee,
 // and error if any.
 //
