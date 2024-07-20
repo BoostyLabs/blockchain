@@ -10,13 +10,12 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/stretchr/testify/require"
-
 	"github.com/BoostyLabs/blockchain/bitcoin"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTxBuilder(t *testing.T) {
@@ -46,17 +45,17 @@ func TestTxBuilder(t *testing.T) {
 			{big.NewInt(150000), big.NewInt(150546), 2, []*bitcoin.UTXO{&utxos[0], &utxos[5]}, nil},
 			{big.NewInt(10020), big.NewInt(25546), 2, []*bitcoin.UTXO{&utxos[2], &utxos[5]}, nil},
 			{big.NewInt(11000), big.NewInt(30546), 3, []*bitcoin.UTXO{&utxos[2], &utxos[5], &utxos[4]}, nil},
-			{big.NewInt(255000), nil, 2, nil, bitcoin.ErrInsufficientNativeBalance},
+			{big.NewInt(255000), nil, 2, nil, txbuilder.NewInsufficientError(txbuilder.InsufficientErrorTypeBitcoin, big.NewInt(255000), big.NewInt(225000))},
 			{big.NewInt(255000), big.NewInt(260000), 4, []*bitcoin.UTXO{&utxos[0], &utxos[1], &utxos[2], &utxos[3]}, nil},
 			{big.NewInt(255000), big.NewInt(260546), 5, []*bitcoin.UTXO{&utxos[0], &utxos[1], &utxos[2], &utxos[3], &utxos[5]}, nil},
-			{big.NewInt(200000), nil, 1, nil, bitcoin.ErrInsufficientNativeBalance},
-			{big.NewInt(200000), nil, 8, nil, bitcoin.ErrInvalidUTXOAmount},
+			{big.NewInt(200000), nil, 1, nil, txbuilder.NewInsufficientError(txbuilder.InsufficientErrorTypeBitcoin, big.NewInt(200000), big.NewInt(150000))},
+			{big.NewInt(200000), nil, 8, nil, txbuilder.ErrInvalidUTXOAmount},
 		}
 
 		// by utxo test.
 		utxoFn := func(utxo *bitcoin.UTXO) *big.Int { return utxo.Amount }
 		for _, test := range tests {
-			usedUTXOs, totalAmount, err := txbuilder.SelectUTXO(utxos, utxoFn, test.minAmount, test.requiredUTXOs, bitcoin.ErrInsufficientNativeBalance)
+			usedUTXOs, totalAmount, err := txbuilder.SelectUTXO(utxos, utxoFn, test.minAmount, test.requiredUTXOs, txbuilder.InsufficientNativeBalanceError)
 			require.Equal(t, test.err, err, test.minAmount.String())
 			require.Equal(t, test.utxos, usedUTXOs, test.minAmount.String())
 			require.EqualValues(t, test.totalAmount, totalAmount, test.minAmount.String())
@@ -85,11 +84,11 @@ func TestTxBuilder(t *testing.T) {
 			return big.NewInt(0)
 		}
 		for _, test := range tests {
-			if errors.Is(test.err, bitcoin.ErrInsufficientNativeBalance) {
-				test.err = bitcoin.ErrInsufficientRuneBalance
+			if ie := new(txbuilder.InsufficientError); errors.As(test.err, &ie) {
+				test.err = txbuilder.NewInsufficientError(txbuilder.InsufficientErrorTypeRune, ie.Need, ie.Have)
 			}
 
-			usedUTXOs, totalAmount, err := txbuilder.SelectUTXO(utxos, runeFn, test.minAmount, test.requiredUTXOs, bitcoin.ErrInsufficientRuneBalance)
+			usedUTXOs, totalAmount, err := txbuilder.SelectUTXO(utxos, runeFn, test.minAmount, test.requiredUTXOs, txbuilder.InsufficientRuneBalanceError)
 			require.Equal(t, test.err, err, test.minAmount.String())
 			require.Equal(t, test.utxos, usedUTXOs, test.minAmount.String())
 			require.EqualValues(t, test.totalAmount, totalAmount, test.minAmount.String())

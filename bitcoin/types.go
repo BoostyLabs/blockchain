@@ -4,19 +4,9 @@
 package bitcoin
 
 import (
-	"errors"
 	"math/big"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-)
-
-var (
-	// ErrInsufficientNativeBalance describes that there is not enough native balance to cover the payment.
-	ErrInsufficientNativeBalance = errors.New("insufficient native balance")
-	// ErrInsufficientRuneBalance describes that there is not enough rune balance to cover the payment.
-	ErrInsufficientRuneBalance = errors.New("insufficient rune balance")
-	// ErrInvalidUTXOAmount describes that there was invalid UTXO amount transmitted.
-	ErrInvalidUTXOAmount = errors.New("invalid UTXO amount")
 )
 
 // UTXO describes unspent transaction output data.

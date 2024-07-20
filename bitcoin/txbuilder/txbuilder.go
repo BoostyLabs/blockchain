@@ -9,6 +9,10 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcutil/psbt"
@@ -16,11 +20,15 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+)
 
-	"github.com/BoostyLabs/blockchain/bitcoin"
-	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
-	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/numbers"
+var (
+	// InsufficientNativeBalanceError describes class of errors when there is not enough native balance to cover the payment.
+	InsufficientNativeBalanceError = &InsufficientError{Type: InsufficientErrorTypeBitcoin}
+	// InsufficientRuneBalanceError describes class of errors when there is not enough rune balance to cover the payment.
+	InsufficientRuneBalanceError = &InsufficientError{Type: InsufficientErrorTypeRune}
+	// ErrInvalidUTXOAmount describes that there was invalid UTXO amount transmitted.
+	ErrInvalidUTXOAmount = errors.New("invalid UTXO amount")
 )
 
 const (
@@ -999,7 +1007,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
 	if numbers.IsGreater(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
-			return result, bitcoin.ErrInsufficientNativeBalance
+			return result, InsufficientNativeBalanceError.clarify(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount)
 		}
 
 		prepareUTXOsResult, err = PrepareUTXOs(PrepareUTXOsParams{
@@ -1195,13 +1203,13 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 			result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
 
 			result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.Utxos, satFn,
-				new(big.Int).Add(result.RoughEstimate, params.TransferAmount), i, bitcoin.ErrInsufficientNativeBalance)
+				new(big.Int).Add(result.RoughEstimate, params.TransferAmount), i, InsufficientNativeBalanceError)
 		} else {
 			result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.Utxos, satFn,
-				new(big.Int).Set(params.TransferAmount), i, bitcoin.ErrInsufficientNativeBalance)
+				new(big.Int).Set(params.TransferAmount), i, InsufficientNativeBalanceError)
 		}
 		if err != nil {
-			if errors.Is(err, bitcoin.ErrInsufficientNativeBalance) {
+			if errors.As(err, new(*InsufficientError)) {
 				continue
 			}
 
@@ -1211,7 +1219,7 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 		return result, nil
 	}
 
-	return result, bitcoin.ErrInsufficientNativeBalance
+	return result, err
 }
 
 // PrepareUTXOsParams defines parameters for PrepareUTXOs function.
@@ -1251,9 +1259,9 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 	}
 
 	for i := 1; i <= len(utxos); i++ {
-		usedUTXOs, totalAmount, err = SelectUTXO(utxos, runeFn, transferAmount, i, bitcoin.ErrInsufficientRuneBalance)
+		usedUTXOs, totalAmount, err = SelectUTXO(utxos, runeFn, transferAmount, i, InsufficientRuneBalanceError)
 		if err != nil {
-			if errors.Is(err, bitcoin.ErrInsufficientRuneBalance) {
+			if errors.As(err, new(*InsufficientError)) {
 				continue
 			}
 
@@ -1263,7 +1271,7 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 		return usedUTXOs, totalAmount, nil
 	}
 
-	return nil, nil, bitcoin.ErrInsufficientRuneBalance
+	return nil, nil, err
 }
 
 // RoughTxSizeEstimate returns Tx rough estimated size in vBytes.
@@ -1298,9 +1306,9 @@ func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int) (et
 // SelectUTXO is a partly greedy selection algorithm for UTXOs with 'requiredUTXOs' parameter.
 // Returns list of selected by algorithm UTXOs with total amount, counted by passed amount function.
 func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, minAmount *big.Int, requiredUTXOs int,
-	insufficientBalanceError error) (usedUTXOs []*bitcoin.UTXO, totalAmount *big.Int, _ error) {
+	insufficientBalanceError *InsufficientError) (usedUTXOs []*bitcoin.UTXO, totalAmount *big.Int, _ error) {
 	if len(utxos) < requiredUTXOs {
-		return nil, nil, bitcoin.ErrInvalidUTXOAmount
+		return nil, nil, ErrInvalidUTXOAmount
 	}
 
 	usedUTXOs = make([]*bitcoin.UTXO, 0, requiredUTXOs)
@@ -1326,7 +1334,7 @@ func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, min
 	for ; requiredUTXOs > 0; requiredUTXOs-- {
 		idx := selectUnused(startIdx, len(utxos), usedIdxs, !numbers.IsGreater(minAmount, totalAmount))
 		if idx == -1 {
-			return nil, nil, bitcoin.ErrInvalidUTXOAmount
+			return nil, nil, ErrInvalidUTXOAmount
 		}
 
 		usedIdxs = append(usedIdxs, idx)
@@ -1335,7 +1343,7 @@ func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, min
 	}
 
 	if numbers.IsGreater(minAmount, totalAmount) {
-		return nil, nil, insufficientBalanceError
+		return nil, nil, insufficientBalanceError.clarify(minAmount, totalAmount)
 	}
 
 	return usedUTXOs, totalAmount, nil
