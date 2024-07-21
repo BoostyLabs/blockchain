@@ -40,6 +40,9 @@ const inscriptionEndDisASM string = "OP_ENDIF"
 // maxBodyDataPushLen defines maximum size of the data push for bitcoin scripts.
 const maxBodyDataPushLen int = 520
 
+// maxScriptDataPushes defines maximum number of the data push of maxBodyDataPushLen size for bitcoin scripts.
+const maxScriptDataPushes int = 19
+
 // Inscription describes inscription type of the inscription protocol,
 // which inscribe sats with arbitrary content, creating bitcoin-native digital artifacts.
 type Inscription struct {
@@ -262,9 +265,29 @@ func (i *Inscription) IntoScript() ([]byte, error) {
 
 	if len(i.Body) != 0 {
 		scriptBuilder.AddOp(txscript.OP_0)
-		for _, bytes := range i.PrepareBody() {
-			scriptBuilder.AddData(bytes)
+		script, err := scriptBuilder.Script()
+		if err != nil {
+			return nil, err
 		}
+
+		for _, group := range i.PrepareBody() {
+			bodyScriptBuilder := txscript.NewScriptBuilder()
+			for _, bytes := range group {
+				bodyScriptBuilder.AddData(bytes)
+			}
+
+			bodyPartScript, err := bodyScriptBuilder.Script()
+			if err != nil {
+				return nil, err
+			}
+
+			script = append(script, bodyPartScript...)
+		}
+
+		// inscription protocol end.
+		script = append(script, txscript.OP_ENDIF)
+
+		return script, nil
 	}
 
 	// inscription protocol end.
@@ -273,22 +296,45 @@ func (i *Inscription) IntoScript() ([]byte, error) {
 	return scriptBuilder.Script()
 }
 
-// PrepareBody returns Inscription body as array of bytes arrays with maxBodyDataPushLen size.
-func (i *Inscription) PrepareBody() [][]byte {
-	buffer := make([][]byte, 0, (len(i.Body)/maxBodyDataPushLen)+1)
-	start := 0
-	end := maxBodyDataPushLen
-	for len(i.Body) >= end {
-		buffer = append(buffer, i.Body[start:end])
+// PrepareBody returns Inscription body as array of bytes arrays with maxBodyDataPushLen size with separation by maximum script size.
+func (i *Inscription) PrepareBody() [][][]byte {
+	bufferSize := ceilQuotient(len(i.Body), maxBodyDataPushLen)
+	buffer := make([][]byte, bufferSize)
+	start, end := 0, maxBodyDataPushLen
+	for idx := 0; idx < bufferSize; idx++ {
+		if end > len(i.Body) {
+			end = len(i.Body)
+		}
+
+		buffer[idx] = i.Body[start:end]
 		start = end
 		end += maxBodyDataPushLen
 	}
 
-	if start < len(i.Body) {
-		buffer = append(buffer, i.Body[start:])
+	groupsSize := ceilQuotient(bufferSize, maxScriptDataPushes)
+	groups := make([][][]byte, groupsSize)
+	start, end = 0, maxScriptDataPushes
+	for idx := 0; idx < groupsSize; idx++ {
+		if end > len(buffer) {
+			end = len(buffer)
+		}
+
+		groups[idx] = buffer[start:end]
+		start = end
+		end += maxScriptDataPushes
 	}
 
-	return buffer
+	return groups
+}
+
+// cellQuotient returns division result with ceil function applied.
+func ceilQuotient(divided, divisor int) int {
+	ceilQuo := divided / divisor
+	if divided%divisor != 0 {
+		ceilQuo++
+	}
+
+	return ceilQuo
 }
 
 // IntoScriptForWitness returns Inscription as a script with pubKey verify at the beginning for witness data.

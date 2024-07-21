@@ -23,28 +23,36 @@ func TestInscription(t *testing.T) {
 	t.Run("PrepareBody", func(t *testing.T) {
 		tests := []struct {
 			bodySize        int
-			expectedBufSize int
+			expectedGroups  int
+			expectedBufSize []int
 			lastArrSize     int
 		}{
-			{0, 0, 0},
-			{1, 1, 1},
-			{519, 1, 519},
-			{520, 1, 520},
-			{521, 2, 1},
-			{1039, 2, 519},
-			{1040, 2, 520},
-			{1041, 3, 1},
+			{0, 0, []int{0}, 0},
+			{1, 1, []int{1}, 1},
+			{519, 1, []int{1}, 519},
+			{520, 1, []int{1}, 520},
+			{521, 1, []int{2}, 1},
+			{1039, 1, []int{2}, 519},
+			{1040, 1, []int{2}, 520},
+			{1041, 1, []int{3}, 1},
+			{9880, 1, []int{19}, 520},
+			{10000, 2, []int{19, 1}, 120},
 		}
 		for _, test := range tests {
 			inscription := new(inscriptions.Inscription)
 			inscription.Body = make([]byte, test.bodySize)
-			buffer := inscription.PrepareBody()
-			require.Len(t, buffer, test.expectedBufSize)
-			if test.expectedBufSize > 0 {
-				for i := 0; i < test.expectedBufSize-1; i++ {
-					require.Len(t, buffer[i], 520)
+			groups := inscription.PrepareBody()
+			require.Len(t, groups, test.expectedGroups)
+			for gIdx, buffer := range groups {
+				require.Len(t, buffer, test.expectedBufSize[gIdx])
+				if test.expectedBufSize[gIdx] > 0 {
+					for i := 0; i < test.expectedBufSize[gIdx]-1; i++ {
+						require.Len(t, buffer[i], 520)
+					}
 				}
-				require.Len(t, buffer[test.expectedBufSize-1], test.lastArrSize)
+				if gIdx == len(groups)-1 {
+					require.Len(t, buffer[test.expectedBufSize[gIdx]-1], test.lastArrSize)
+				}
 			}
 		}
 	})
