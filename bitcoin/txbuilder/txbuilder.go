@@ -709,16 +709,17 @@ func (b *TxBuilder) buildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 			feePayerAddressData.addrType = FeePayerPaymentInputsHelpingKey
 		}
 
+		shift := len(params.UsedSenderBaseUTXOs) // sender utxos inputs shift.
 		feePayerIndexes := make([]byte, len(params.UsedFeePayerBaseUTXOs))
 		for i, utxo := range params.UsedFeePayerBaseUTXOs {
 			switch feePayerAddressData.addrType {
 			case FeePayerTaprootInputsHelpingKey:
-				p.Inputs[i].TaprootInternalKey = feePayerAddressData.publicKeyBytes
+				p.Inputs[shift+i].TaprootInternalKey = feePayerAddressData.publicKeyBytes
 			case FeePayerPaymentInputsHelpingKey:
-				p.Inputs[i].RedeemScript = feePayerAddressData.witnessProg
+				p.Inputs[shift+i].RedeemScript = feePayerAddressData.witnessProg
 			}
-			p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
-			p.Inputs[i].SighashType = signHashType
+			p.Inputs[shift+i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
+			p.Inputs[shift+i].SighashType = signHashType
 			feePayerIndexes[i] = byte(i)
 		}
 
