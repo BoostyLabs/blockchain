@@ -826,7 +826,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 		Utxos:            params.Sender.UTXOs,
 		Inputs:           0,
 		Outputs:          outputs,
-		TransferAmount:   satTransferAmount,
+		TransferAmount:   depositAmount,
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
 	})
 	if err != nil {
