@@ -822,6 +822,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
 
 	depositAmount.Add(etchTransactionFee, satTransferAmount)
+	depositAmount.Add(etchTransactionFee, nonDustBitcoinAmount) // add runes recipient output.
 	senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
 		Utxos:            params.Sender.UTXOs,
 		Inputs:           0,
@@ -1011,7 +1012,8 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	}
 
 	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
-	if numbers.IsGreater(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount) {
+	transferAmount := new(big.Int).Add(etchTransactionFee, nonDustBitcoinAmount)
+	if numbers.IsGreater(transferAmount, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
 			return result, InsufficientNativeBalanceError.clarify(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount)
 		}
@@ -1020,7 +1022,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 			Utxos:            params.AdditionalPayments.UTXOs,
 			Inputs:           1,
 			Outputs:          0,
-			TransferAmount:   new(big.Int).Sub(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount),
+			TransferAmount:   new(big.Int).Sub(transferAmount, params.InscriptionReveal.UTXOs[0].Amount),
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
 		})
 		if err != nil {
