@@ -933,13 +933,17 @@ func (b *TxBuilder) BuildRuneEtchTx(params BaseRuneEtchTxParams) (result BuildRu
 		return result, err
 	}
 
-	result.SerializedPSBT, err = b.buildRuneEtchTxPSBT(BuildRuneEtchTxPSBTParams{
-		BaseRuneEtchTxResult:      buildBaseTransferRuneTxResult,
-		InscriptionBasePubKey:     params.InscriptionReveal.PubKey,
-		InscriptionBaseAddress:    inscriptionAddress,
-		AdditionalPaymentsAddress: params.AdditionalPayments.Address,
-		AdditionalPaymentsPubKey:  params.AdditionalPayments.PubKey,
-	})
+	buildRuneEtchTxPSBTParams := BuildRuneEtchTxPSBTParams{
+		BaseRuneEtchTxResult:   buildBaseTransferRuneTxResult,
+		InscriptionBasePubKey:  params.InscriptionReveal.PubKey,
+		InscriptionBaseAddress: inscriptionAddress,
+	}
+	if params.AdditionalPayments != nil {
+		buildRuneEtchTxPSBTParams.AdditionalPaymentsAddress = params.AdditionalPayments.Address
+		buildRuneEtchTxPSBTParams.AdditionalPaymentsPubKey = params.AdditionalPayments.PubKey
+	}
+
+	result.SerializedPSBT, err = b.buildRuneEtchTxPSBT(buildRuneEtchTxPSBTParams)
 	if err != nil {
 		return result, err
 	}
