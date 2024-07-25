@@ -834,7 +834,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 		return result, err
 	}
 
-	bitcoinAmount := senderUTXOsResult.TotalAmount
+	bitcoinAmount := new(big.Int).Set(senderUTXOsResult.TotalAmount)
 
 	tx := wire.NewMsgTx(txVersion)
 	for _, i := range senderUTXOsResult.UsedUTXOs {
@@ -999,7 +999,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		return result, errors.New("invalid inscription utxo data")
 	}
 
-	bitcoinAmount := params.InscriptionReveal.UTXOs[0].Amount
+	bitcoinAmount := new(big.Int).Set(params.InscriptionReveal.UTXOs[0].Amount)
 
 	runestone := &runes.Runestone{
 		Etching: params.Rune,
