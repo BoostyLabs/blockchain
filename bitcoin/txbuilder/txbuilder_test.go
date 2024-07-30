@@ -10,12 +10,13 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/stretchr/testify/require"
+
 	"github.com/BoostyLabs/blockchain/bitcoin"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTxBuilder(t *testing.T) {
@@ -261,7 +262,7 @@ func TestTxBuilder(t *testing.T) {
 			params        txbuilder.BaseInscriptionTxParams
 		}{
 			{
-				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////AqEEAAAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZWyYQAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJXhpAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
+				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////AsMGAAAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZWQXwAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJXhpAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
 				txbuilder.BaseInscriptionTxParams{
 					Sender: &txbuilder.PaymentData{
 						UTXOs: []bitcoin.UTXO{

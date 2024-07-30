@@ -9,10 +9,6 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/BoostyLabs/blockchain/bitcoin"
-	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
-	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/numbers"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcutil/psbt"
@@ -20,6 +16,11 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+
+	"github.com/BoostyLabs/blockchain/bitcoin"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
+	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 var (
@@ -761,7 +762,7 @@ func (b *TxBuilder) BuildInscriptionTx(params BaseInscriptionTxParams) (result B
 	return result, nil
 }
 
-// buildBaseTransferBTCTx constructs base btc transferring transaction.
+// buildBaseInscriptionTx constructs base inscription commitment transaction.
 // Returns transaction, list of used base utxos pointers, estimated fee,
 // and error if any.
 //
