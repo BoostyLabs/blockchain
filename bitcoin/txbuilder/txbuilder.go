@@ -1316,7 +1316,7 @@ func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int) (et
 // Returns list of selected by algorithm UTXOs with total amount, counted by passed amount function.
 func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, minAmount *big.Int, requiredUTXOs int,
 	insufficientBalanceError *InsufficientError) (usedUTXOs []*bitcoin.UTXO, totalAmount *big.Int, _ error) {
-	if len(utxos) < requiredUTXOs {
+	if len(utxos) == 0 || len(utxos) < requiredUTXOs {
 		return nil, nil, ErrInvalidUTXOAmount
 	}
 
