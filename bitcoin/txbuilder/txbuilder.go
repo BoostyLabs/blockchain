@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -30,6 +31,8 @@ var (
 	InsufficientRuneBalanceError = &InsufficientError{Type: InsufficientErrorTypeRune}
 	// ErrInvalidUTXOAmount describes that there was invalid UTXO amount transmitted.
 	ErrInvalidUTXOAmount = errors.New("invalid UTXO amount")
+	// ErrPrepareAddressData defines errors class for prepare address data method.
+	ErrPrepareAddressData = errors.New("prepare address data")
 )
 
 const (
@@ -542,6 +545,9 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	if params.Sender == nil {
 		return result, errors.New("sender data is required")
 	}
+	if len(params.Sender.UTXOs) == 0 {
+		return result, errors.New("sender utxos len: 0")
+	}
 
 	var (
 		outputs           = 2 // btc transfer + sender btc change.
@@ -797,6 +803,9 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	if params.Sender == nil {
 		return result, errors.New("sender data is required")
 	}
+	if len(params.Sender.UTXOs) == 0 {
+		return result, errors.New("sender utxos len: 0")
+	}
 
 	var (
 		outputs                = 2 // inscription commitment + sender btc change.
@@ -990,15 +999,15 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	if params.Inscription == nil {
 		return result, errors.New("inscription data is required")
 	}
+	if len(params.InscriptionReveal.UTXOs) != 1 {
+		return result, fmt.Errorf("invalid inscription utxo data len: %d, must be: 1", len(params.InscriptionReveal.UTXOs))
+	}
 
 	var (
 		pointerValue           uint32 = 1
 		inscriptionWitnessSize int
 		prepareUTXOsResult     PrepareUTXOsResult
 	)
-	if len(params.InscriptionReveal.UTXOs) != 1 {
-		return result, errors.New("invalid inscription utxo data")
-	}
 
 	bitcoinAmount := new(big.Int).Set(params.InscriptionReveal.UTXOs[0].Amount)
 
@@ -1159,6 +1168,12 @@ type addressData struct {
 
 // prepareAddressData returns addressData from public key and address.
 func (b *TxBuilder) prepareAddressData(pk, address string) (result addressData, err error) {
+	defer func(err *error) {
+		if err != nil && *err != nil {
+			*err = errors.Join(ErrPrepareAddressData, *err)
+		}
+	}(&err)
+
 	result.publicKeyBytes, err = hex.DecodeString(pk)
 	if err != nil {
 		return result, err
@@ -1170,7 +1185,7 @@ func (b *TxBuilder) prepareAddressData(pk, address string) (result addressData, 
 	}
 
 	switch addressType.(type) {
-	case *btcutil.AddressTaproot:
+	case *btcutil.AddressTaproot, *btcutil.AddressWitnessPubKeyHash, *btcutil.AddressWitnessScriptHash, *btcutil.AddressSegWit:
 		result.addrType = TaprootInputsHelpingKey
 		if len(result.publicKeyBytes) == 33 {
 			result.publicKeyBytes = result.publicKeyBytes[1:]
@@ -1228,7 +1243,7 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 		return result, nil
 	}
 
-	return result, err
+	return result, InsufficientNativeBalanceError
 }
 
 // PrepareUTXOsParams defines parameters for PrepareUTXOs function.
@@ -1280,7 +1295,7 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 		return usedUTXOs, totalAmount, nil
 	}
 
-	return nil, nil, err
+	return nil, nil, InsufficientRuneBalanceError
 }
 
 // RoughTxSizeEstimate returns Tx rough estimated size in vBytes.
@@ -1361,7 +1376,8 @@ func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, min
 // addOutput adds output to transaction, subtracts amount from unallocated amount.
 func (b *TxBuilder) addOutput(tx *wire.MsgTx, amount, unallocatedAmount *big.Int, address string) error {
 	if numbers.IsLess(unallocatedAmount, amount) {
-		return errors.New("unallocated amount is less than the amount in provided inputs")
+		return fmt.Errorf("the rest of the unallocated btc amount (%s) is less than the output allocating amount (%s)",
+			unallocatedAmount.String(), amount.String())
 	}
 
 	recipientAddress, err := btcutil.DecodeAddress(address, b.networkParams)
