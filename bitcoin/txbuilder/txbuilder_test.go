@@ -259,10 +259,63 @@ func TestTxBuilder(t *testing.T) {
 
 		tests := []struct {
 			expectedTxB64 string
+			error         error
 			params        txbuilder.BaseInscriptionTxParams
 		}{
 			{
 				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////AsMGAAAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZWQXwAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJXhpAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
+				nil,
+				txbuilder.BaseInscriptionTxParams{
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					InscriptionBasePubKey: "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+				},
+			},
+			{
+				"", txbuilder.InsufficientNativeBalanceError,
+				txbuilder.BaseInscriptionTxParams{
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					InscriptionBasePubKey:     "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					SatoshiCommissionAmount:   big.NewInt(100000),
+					CommissionReceiverAddress: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+				},
+			},
+			{
+				"cHNidP8BAJ4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////A2ONAQAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZWghgEAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBh5LgCQAAAAAAF6kUqliOlGHn/KzNELU020ci3XIxIsGHAAAAAAEgAQAAAQElUPgMAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABBBYAFPPrPEU7ARQeYCvrLRM19r5Qe4E4AAAAAA==",
+				nil,
 				txbuilder.BaseInscriptionTxParams{
 					Sender: &txbuilder.PaymentData{
 						UTXOs: []bitcoin.UTXO{
@@ -289,13 +342,15 @@ func TestTxBuilder(t *testing.T) {
 						Rune: rune_,
 						Body: []byte("test data"),
 					},
-					InscriptionBasePubKey: "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					InscriptionBasePubKey:     "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					SatoshiCommissionAmount:   big.NewInt(100000),
+					CommissionReceiverAddress: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
 				},
 			},
 		}
 		for _, test := range tests {
 			result, err := txBuilder.BuildInscriptionTx(test.params)
-			require.NoError(t, err)
+			require.ErrorIs(t, err, test.error)
 			require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
 		}
 	})
