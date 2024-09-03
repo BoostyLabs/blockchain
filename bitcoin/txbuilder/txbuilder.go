@@ -830,15 +830,15 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}
 
 	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
-
 	depositAmount.Add(depositAmount, etchTransactionFee)
-	depositAmount.Add(depositAmount, satTransferAmount)
 	depositAmount.Add(depositAmount, nonDustBitcoinAmount) // add runes recipient output.
+
+	satTransferAmount.Add(satTransferAmount, depositAmount)
 	senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
 		Utxos:            params.Sender.UTXOs,
 		Inputs:           0,
 		Outputs:          outputs,
-		TransferAmount:   depositAmount,
+		TransferAmount:   satTransferAmount,
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
 	})
 	if err != nil {
