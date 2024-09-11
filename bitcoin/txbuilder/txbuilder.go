@@ -1141,9 +1141,10 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 			case FeePayerPaymentInputsHelpingKey:
 				p.Inputs[i+1].RedeemScript = additionalPaymentAddressData.witnessProg
 			}
+
 			p.Inputs[i+1].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 			p.Inputs[i+1].SighashType = signHashType
-			indexes[i+1] = byte(i + 1)
+			indexes[i] = byte(i + 1)
 		}
 
 		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: additionalPaymentAddressData.addrType.Bytes(), Value: indexes})

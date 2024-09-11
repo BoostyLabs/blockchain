@@ -342,6 +342,7 @@ func (i *Inscription) IntoScriptForWitness(serializedPubKey []byte) ([]byte, err
 	scriptBuilder := txscript.NewScriptBuilder()
 	scriptBuilder.AddData(serializedPubKey)
 	scriptBuilder.AddOp(txscript.OP_CHECKSIG)
+
 	script, err := scriptBuilder.Script()
 	if err != nil {
 		return nil, err
