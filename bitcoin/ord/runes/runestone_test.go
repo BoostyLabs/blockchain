@@ -233,6 +233,35 @@ func TestRunestone(t *testing.T) {
 			require.Equal(t, script, hex.EncodeToString(data))
 		})
 
+		t.Run("etching, real signet case", func(t *testing.T) {
+			script := "6a5d2b0126020104faa99c8abad4cba60305e6ef0706808080808080a8918bc0a2bbaf9ccfdc86c1bfbbcd051601"
+
+			divisibility := byte(38)
+			premine, ok := new(big.Int).SetString("1000000000000000000000000000000000000000000000", 10)
+			require.True(t, ok)
+
+			rune_, err := runes.NewRuneFromString("BLUERUNEONEEE")
+			require.NoError(t, err)
+
+			symbol := rune(128998)
+			pointerValue := uint32(1)
+
+			runestone := &runes.Runestone{
+				Etching: &runes.Etching{
+					Divisibility: &divisibility,
+					Premine:      premine,
+					Rune:         rune_,
+					Spacers:      nil,
+					Symbol:       &symbol,
+				},
+				Pointer: &pointerValue,
+			}
+
+			data, err := runestone.IntoScript()
+			require.NoError(t, err)
+			require.Equal(t, script, hex.EncodeToString(data))
+		})
+
 		t.Run("etching with pointer", func(t *testing.T) {
 			divisibility := byte(4)
 			spasers := uint32(256)

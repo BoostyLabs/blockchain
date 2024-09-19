@@ -237,7 +237,9 @@ func (runestone *Runestone) Serialize() ([]byte, error) {
 		message.Fields[TagDivisibility] = []*big.Int{big.NewInt(int64(*runestone.Etching.Divisibility))}
 		message.Fields[TagPremine] = []*big.Int{runestone.Etching.Premine}
 		message.Fields[TagRune] = []*big.Int{runestone.Etching.Rune.Value()}
-		message.Fields[TagSpacers] = []*big.Int{big.NewInt(int64(*runestone.Etching.Spacers))}
+		if runestone.Etching.Spacers != nil {
+			message.Fields[TagSpacers] = []*big.Int{big.NewInt(int64(*runestone.Etching.Spacers))}
+		}
 		message.Fields[TagSymbol] = []*big.Int{big.NewInt(int64(*runestone.Etching.Symbol))}
 
 		if runestone.Etching.Terms != nil {

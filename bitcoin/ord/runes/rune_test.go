@@ -147,7 +147,6 @@ func TestRunes(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, test.spacers, spacer)
 			require.EqualValues(t, test.expectedRune, rune_.String(), test.expectedRune)
-			require.EqualValues(t, test.expectedRune, rune_.String(), test.expectedRune)
 		}
 	})
 
