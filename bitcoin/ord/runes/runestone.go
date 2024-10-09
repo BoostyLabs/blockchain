@@ -387,16 +387,28 @@ func (runestone *Runestone) IsValidEdicts(outputsNumber int) bool {
 func (runestone *Runestone) Verify(outputsNumber int) error {
 	switch {
 	case runestone.Pointer != nil && int(*runestone.Pointer) > outputsNumber:
-		return fmt.Errorf("the Pointer(%d) is out of output idxs range [0;%d)", *runestone.Pointer, outputsNumber)
+		return &CenotaphError{
+			type_:   PointerCenotaphErrorType,
+			message: fmt.Sprintf("the Pointer(%d) is out of output idxs range [0;%d)", *runestone.Pointer, outputsNumber),
+		}
 	case runestone.Etching != nil && (runestone.Etching.Rune == nil || runestone.Etching.Symbol == nil ||
 		runestone.Etching.Divisibility == nil || runestone.Etching.Spacers == nil):
-		return fmt.Errorf("the Etching field id not full %+v", *runestone.Etching)
+		return &CenotaphError{
+			type_:   EtchingCenotaphErrorType,
+			message: fmt.Sprintf("the Etching field id not full %+v", *runestone.Etching),
+		}
 	case runestone.Mint != nil && runestone.Mint.Block == 0 && runestone.Mint.TxID != 0:
-		return fmt.Errorf("invalid Mint(%s)", runestone.Mint.String())
+		return &CenotaphError{
+			type_:   MintCenotaphErrorType,
+			message: fmt.Sprintf("invalid Mint(%s)", runestone.Mint.String()),
+		}
 	}
 	for idx, edict := range runestone.Edicts {
 		if (edict.RuneID.Block == 0 && edict.RuneID.TxID != 0) || int(edict.Output) > outputsNumber {
-			return fmt.Errorf("the Edict[%d] is malformed: %+v in output idxs range [0;%d]", idx, edict, outputsNumber)
+			return &CenotaphError{
+				type_:   EdictsCenotaphErrorType,
+				message: fmt.Sprintf("the Edict[%d] is malformed: %+v in output idxs range [0;%d]", idx, edict, outputsNumber),
+			}
 		}
 	}
 

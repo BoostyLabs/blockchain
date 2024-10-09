@@ -395,26 +395,29 @@ func TestRunestone(t *testing.T) {
 			runestone *runes.Runestone
 			outputs   int
 			errorS    string
+			type_     byte
 		}{
 			{
 				runestone: &runes.Runestone{Pointer: ptr[uint32](5)},
 				outputs:   2,
 				errorS:    "the Pointer(5) is out of output idxs range [0;2)",
+				type_:     runes.PointerCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Pointer: ptr[uint32](2)},
 				outputs:   5,
-				errorS:    "",
 			},
 			{
 				runestone: &runes.Runestone{Etching: &runes.Etching{Divisibility: ptr[byte](5)}},
 				outputs:   2,
 				errorS:    "the Etching field id not full {Divisibility:",
+				type_:     runes.EtchingCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Etching: &runes.Etching{Divisibility: ptr[byte](5)}},
 				outputs:   2,
 				errorS:    " Premine:<nil> Rune:<nil> Spacers:<nil> Symbol:<nil> Terms:<nil> Turbo:false}",
+				type_:     runes.EtchingCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{
@@ -427,22 +430,20 @@ func TestRunestone(t *testing.T) {
 					},
 				},
 				outputs: 2,
-				errorS:  "",
 			},
 			{
 				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 0, TxID: 5}},
 				outputs:   2,
 				errorS:    "invalid Mint(0:5)",
+				type_:     runes.MintCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 0, TxID: 0}},
 				outputs:   2,
-				errorS:    "",
 			},
 			{
 				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 123, TxID: 15}},
 				outputs:   2,
-				errorS:    "",
 			},
 			{
 				runestone: &runes.Runestone{Edicts: []runes.Edict{
@@ -451,6 +452,7 @@ func TestRunestone(t *testing.T) {
 				}},
 				outputs: 2,
 				errorS:  "the Edict[0] is malformed: {RuneID:{Block:0 TxID:5} Amount:+0 Output:1} in output idxs range [0;2]",
+				type_:   runes.EdictsCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Edicts: []runes.Edict{
@@ -458,6 +460,7 @@ func TestRunestone(t *testing.T) {
 				}},
 				outputs: 2,
 				errorS:  "the Edict[0] is malformed: {RuneID:{Block:0 TxID:0} Amount:+0 Output:3} in output idxs range [0;2]",
+				type_:   runes.EdictsCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Edicts: []runes.Edict{
@@ -466,19 +469,22 @@ func TestRunestone(t *testing.T) {
 				}},
 				outputs: 2,
 				errorS:  "the Edict[1] is malformed: {RuneID:{Block:0 TxID:7} Amount:+0 Output:3} in output idxs range [0;2]",
+				type_:   runes.EdictsCenotaphErrorType,
 			},
 			{
 				runestone: &runes.Runestone{Edicts: []runes.Edict{
 					{RuneID: runes.RuneID{Block: 123, TxID: 15}, Amount: big.NewInt(0), Output: 1},
 				}},
 				outputs: 2,
-				errorS:  "",
 			},
 		}
 		for _, test := range tests {
 			err := test.runestone.Verify(test.outputs)
 			if test.errorS != "" {
-				require.ErrorContains(t, err, test.errorS)
+				cenotaphErr := new(runes.CenotaphError)
+				require.ErrorAs(t, err, &cenotaphErr)
+				require.Equal(t, test.type_, cenotaphErr.Type())
+				require.ErrorContains(t, cenotaphErr, test.errorS)
 			} else {
 				require.NoError(t, err)
 			}
