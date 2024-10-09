@@ -6,6 +6,7 @@ package runes
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/aviate-labs/leb128"
@@ -382,24 +383,24 @@ func (runestone *Runestone) IsValidEdicts(outputsNumber int) bool {
 	return true
 }
 
-// IsCenotaph returns true if Runestone contains rune protocol rules violation.
-func (runestone *Runestone) IsCenotaph(outputsNumber int) bool {
+// Verify verifies if Runestone contains rune protocol rules violation.
+func (runestone *Runestone) Verify(outputsNumber int) error {
 	switch {
 	case runestone.Pointer != nil && int(*runestone.Pointer) > outputsNumber:
-		return true
+		return fmt.Errorf("the Pointer(%d) is out of output idxs range [0;%d)", *runestone.Pointer, outputsNumber)
 	case runestone.Etching != nil && (runestone.Etching.Rune == nil || runestone.Etching.Symbol == nil ||
 		runestone.Etching.Divisibility == nil || runestone.Etching.Spacers == nil):
-		return true
+		return fmt.Errorf("the Etching field id not full %+v", *runestone.Etching)
 	case runestone.Mint != nil && runestone.Mint.Block == 0 && runestone.Mint.TxID != 0:
-		return true
+		return fmt.Errorf("invalid Mint(%s)", runestone.Mint.String())
 	}
-	for _, edict := range runestone.Edicts {
+	for idx, edict := range runestone.Edicts {
 		if (edict.RuneID.Block == 0 && edict.RuneID.TxID != 0) || int(edict.Output) > outputsNumber {
-			return true
+			return fmt.Errorf("the Edict[%d] is malformed: %+v in output idxs range [0;%d]", idx, edict, outputsNumber)
 		}
 	}
 
-	return false
+	return nil
 }
 
 // PreparePayload validates raw script payload, removes OP_<...> bytes,

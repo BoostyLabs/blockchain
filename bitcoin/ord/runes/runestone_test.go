@@ -370,14 +370,13 @@ func TestRunestone(t *testing.T) {
 			isValidEtching bool
 			isValidMint    bool
 			isValidEdicts  bool
-			isCenotaph     bool
 		}{
-			{"6a5d09008fe69d0154d70e01", false, false, true, false},
-			{"6a5d0814e5e49d0114cc01", false, true, false, false},
-			{"6a5d0a14b0dd9d011482011601", false, true, false, false},
-			{"6a5d02160e", false, false, false, true},
-			{"6a5d15010a0201030004dedfd1e58fd617054d0680b19164", true, false, false, false},
-			{"6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601", true, false, false, false},
+			{"6a5d09008fe69d0154d70e01", false, false, true},
+			{"6a5d0814e5e49d0114cc01", false, true, false},
+			{"6a5d0a14b0dd9d011482011601", false, true, false},
+			{"6a5d02160e", false, false, false},
+			{"6a5d15010a0201030004dedfd1e58fd617054d0680b19164", true, false, false},
+			{"6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601", true, false, false},
 		}
 		for _, test := range tests {
 			script, err := hex.DecodeString(test.script)
@@ -388,7 +387,104 @@ func TestRunestone(t *testing.T) {
 			require.Equal(t, test.isValidEtching, runestone.IsValidEtching(2))
 			require.Equal(t, test.isValidMint, runestone.IsValidMint(2))
 			require.Equal(t, test.isValidEdicts, runestone.IsValidEdicts(2))
-			require.Equal(t, test.isCenotaph, runestone.IsCenotaph(2))
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		tests := []struct {
+			runestone *runes.Runestone
+			outputs   int
+			errorS    string
+		}{
+			{
+				runestone: &runes.Runestone{Pointer: ptr[uint32](5)},
+				outputs:   2,
+				errorS:    "the Pointer(5) is out of output idxs range [0;2)",
+			},
+			{
+				runestone: &runes.Runestone{Pointer: ptr[uint32](2)},
+				outputs:   5,
+				errorS:    "",
+			},
+			{
+				runestone: &runes.Runestone{Etching: &runes.Etching{Divisibility: ptr[byte](5)}},
+				outputs:   2,
+				errorS:    "the Etching field id not full {Divisibility:",
+			},
+			{
+				runestone: &runes.Runestone{Etching: &runes.Etching{Divisibility: ptr[byte](5)}},
+				outputs:   2,
+				errorS:    " Premine:<nil> Rune:<nil> Spacers:<nil> Symbol:<nil> Terms:<nil> Turbo:false}",
+			},
+			{
+				runestone: &runes.Runestone{
+					Etching: &runes.Etching{
+						Divisibility: ptr[byte](4),
+						Premine:      big.NewInt(100000000),
+						Rune:         new(runes.Rune),
+						Spacers:      ptr[uint32](256),
+						Symbol:       ptr[rune](36),
+					},
+				},
+				outputs: 2,
+				errorS:  "",
+			},
+			{
+				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 0, TxID: 5}},
+				outputs:   2,
+				errorS:    "invalid Mint(0:5)",
+			},
+			{
+				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 0, TxID: 0}},
+				outputs:   2,
+				errorS:    "",
+			},
+			{
+				runestone: &runes.Runestone{Mint: &runes.RuneID{Block: 123, TxID: 15}},
+				outputs:   2,
+				errorS:    "",
+			},
+			{
+				runestone: &runes.Runestone{Edicts: []runes.Edict{
+					{RuneID: runes.RuneID{Block: 0, TxID: 5}, Amount: big.NewInt(0), Output: 1},
+					{RuneID: runes.RuneID{Block: 0, TxID: 0}, Amount: big.NewInt(0), Output: 3},
+				}},
+				outputs: 2,
+				errorS:  "the Edict[0] is malformed: {RuneID:{Block:0 TxID:5} Amount:+0 Output:1} in output idxs range [0;2]",
+			},
+			{
+				runestone: &runes.Runestone{Edicts: []runes.Edict{
+					{RuneID: runes.RuneID{Block: 0, TxID: 0}, Amount: big.NewInt(0), Output: 3},
+				}},
+				outputs: 2,
+				errorS:  "the Edict[0] is malformed: {RuneID:{Block:0 TxID:0} Amount:+0 Output:3} in output idxs range [0;2]",
+			},
+			{
+				runestone: &runes.Runestone{Edicts: []runes.Edict{
+					{RuneID: runes.RuneID{Block: 0, TxID: 0}, Amount: big.NewInt(0), Output: 1},
+					{RuneID: runes.RuneID{Block: 0, TxID: 7}, Amount: big.NewInt(0), Output: 3},
+				}},
+				outputs: 2,
+				errorS:  "the Edict[1] is malformed: {RuneID:{Block:0 TxID:7} Amount:+0 Output:3} in output idxs range [0;2]",
+			},
+			{
+				runestone: &runes.Runestone{Edicts: []runes.Edict{
+					{RuneID: runes.RuneID{Block: 123, TxID: 15}, Amount: big.NewInt(0), Output: 1},
+				}},
+				outputs: 2,
+				errorS:  "",
+			},
+		}
+		for _, test := range tests {
+			err := test.runestone.Verify(test.outputs)
+			if test.errorS != "" {
+				require.ErrorContains(t, err, test.errorS)
+			} else {
+				require.NoError(t, err)
+			}
 		}
 	})
 }
+
+// ptr returns pointer to the value.
+func ptr[T any](v T) *T { return &v }
