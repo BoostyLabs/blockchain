@@ -330,7 +330,7 @@ func (runestone *Runestone) IsValidEtching(outputsNumber int) bool {
 	switch {
 	case runestone.Etching == nil:
 		return false
-	case runestone.Pointer != nil && int(*runestone.Pointer) >= outputsNumber:
+	case runestone.Pointer != nil && int(*runestone.Pointer) > outputsNumber:
 		return false
 	case runestone.Etching.Rune == nil:
 		return false
@@ -352,7 +352,7 @@ func (runestone *Runestone) IsValidMint(outputsNumber int) bool {
 		return false
 	case runestone.Mint.Block == 0 && runestone.Mint.TxID != 0:
 		return false
-	case runestone.Pointer != nil && int(*runestone.Pointer) >= outputsNumber:
+	case runestone.Pointer != nil && int(*runestone.Pointer) > outputsNumber:
 		return false
 	}
 
@@ -380,6 +380,26 @@ func (runestone *Runestone) IsValidEdicts(outputsNumber int) bool {
 	}
 
 	return true
+}
+
+// IsCenotaph returns true if Runestone contains rune protocol rules violation.
+func (runestone *Runestone) IsCenotaph(outputsNumber int) bool {
+	switch {
+	case runestone.Pointer != nil && int(*runestone.Pointer) > outputsNumber:
+		return true
+	case runestone.Etching != nil && (runestone.Etching.Rune == nil || runestone.Etching.Symbol == nil ||
+		runestone.Etching.Divisibility == nil || runestone.Etching.Spacers == nil):
+		return true
+	case runestone.Mint != nil && runestone.Mint.Block == 0 && runestone.Mint.TxID != 0:
+		return true
+	}
+	for _, edict := range runestone.Edicts {
+		if (edict.RuneID.Block == 0 && edict.RuneID.TxID != 0) || int(edict.Output) > outputsNumber {
+			return true
+		}
+	}
+
+	return false
 }
 
 // PreparePayload validates raw script payload, removes OP_<...> bytes,

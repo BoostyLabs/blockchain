@@ -370,13 +370,14 @@ func TestRunestone(t *testing.T) {
 			isValidEtching bool
 			isValidMint    bool
 			isValidEdicts  bool
+			isCenotaph     bool
 		}{
-			{"6a5d09008fe69d0154d70e01", false, false, true},
-			{"6a5d0814e5e49d0114cc01", false, true, false},
-			{"6a5d0a14b0dd9d011482011601", false, true, false},
-			{"6a5d02160e", false, false, false},
-			{"6a5d15010a0201030004dedfd1e58fd617054d0680b19164", true, false, false},
-			{"6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601", true, false, false},
+			{"6a5d09008fe69d0154d70e01", false, false, true, false},
+			{"6a5d0814e5e49d0114cc01", false, true, false, false},
+			{"6a5d0a14b0dd9d011482011601", false, true, false, false},
+			{"6a5d02160e", false, false, false, true},
+			{"6a5d15010a0201030004dedfd1e58fd617054d0680b19164", true, false, false, false},
+			{"6a5d1a020104fae2a3e9ac8cb9d814010403800205240680c2d72f1601", true, false, false, false},
 		}
 		for _, test := range tests {
 			script, err := hex.DecodeString(test.script)
@@ -387,6 +388,7 @@ func TestRunestone(t *testing.T) {
 			require.Equal(t, test.isValidEtching, runestone.IsValidEtching(2))
 			require.Equal(t, test.isValidMint, runestone.IsValidMint(2))
 			require.Equal(t, test.isValidEdicts, runestone.IsValidEdicts(2))
+			require.Equal(t, test.isCenotaph, runestone.IsCenotaph(2))
 		}
 	})
 }
