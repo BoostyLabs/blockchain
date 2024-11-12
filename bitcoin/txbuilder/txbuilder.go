@@ -156,6 +156,7 @@ type BaseInscriptionTxParams struct {
 	CommissionReceiverAddress string                    // recipient commission address, optional.
 	Inscription               *inscriptions.Inscription // inscription data to commit.
 	InscriptionBasePubKey     string                    // public key needed to create inscription address.
+	PremineSplittingFactor    uint                      // for more details see [BaseRuneEtchTxParams.PremineSplittingFactor].
 }
 
 // BaseInscriptionTxResult describes result of buildBaseInscriptionTx method.
@@ -190,6 +191,24 @@ type BaseRuneEtchTxParams struct {
 	SatoshiPerKVByte      *big.Int                  // fee rate in satoshi per kilo virtual byte.
 	RunesRecipientAddress string                    // recipient address to receive etched runes.
 	SatoshiChangeAddress  string                    // address to receive btc change if any left.
+	// PremineSplittingFactor defines between how many utxos premine value will be split.
+	// NOTE: Valid if [Rune.Premine] is positive. Must be less then premine value.
+	// Premine value splitting rules
+	//  - Rune.Premine % PremineSplittingFactor == 0.
+	//  The edict with amount equals quotient and index equals outputs number is applied to the Runestone.
+	//  Example: premine = 12000, PremineSplittingFactor = 6:
+	//  []Edicts{ Edict{RuneID: (0,0),Amount: Rune.Premine / PremineSplittingFactor, Output: len(ouputs)} }.
+	//  As a result there will be: 0 output - Runestone, 1-7 outputs - each containing 2000 runes, 8 - optional change output.
+	//  - Rune.Premine % PremineSplittingFactor == 0.
+	//  The edict from the upper case is applied, but before the remainder edict is applied to the first non-OR_RETURN output.
+	//  Ex. premine = 12005, PremineSplittingFactor = 6:
+	//  []Edicts{
+	//  Edict{RuneID: (0,0),Amount: Rune.Premine % PremineSplittingFactor, Output: 1},
+	//  Edict{RuneID: (0,0),Amount: Rune.Premine / PremineSplittingFactor, Output: len(ouputs)},
+	//  }.
+	//  As a result there will be: 0 output - Runestone, 1 output - 2000 + 5 runes, 2-7 outputs, each containing 2000 runes,
+	//  8 - optional change output.
+	PremineSplittingFactor uint
 }
 
 // BaseRuneEtchTxResult describes result of buildBaseRuneEtchTx method.
@@ -806,6 +825,9 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	if len(params.Sender.UTXOs) == 0 {
 		return result, errors.New("sender utxos len: 0")
 	}
+	if params.PremineSplittingFactor == 0 {
+		params.PremineSplittingFactor = 1 // INFO: set to default.
+	}
 
 	var (
 		outputs                = 2 // inscription commitment + sender btc change.
@@ -829,9 +851,11 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 		return result, err
 	}
 
-	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
+	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)),
+		params.SatoshiPerKVByte, int(params.PremineSplittingFactor))
 	depositAmount.Add(depositAmount, etchTransactionFee)
-	depositAmount.Add(depositAmount, nonDustBitcoinAmount) // add runes recipient output.
+	depositAmount.Add(depositAmount, new(big.Int).Mul(nonDustBitcoinAmount,
+		big.NewInt(int64(params.PremineSplittingFactor)))) // INFO: add runes recipient output.
 
 	satTransferAmount.Add(satTransferAmount, depositAmount)
 	senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
@@ -987,10 +1011,11 @@ func (b *TxBuilder) BuildRuneEtchTx(params BaseRuneEtchTxParams) (result BuildRu
 //	├=========┼==============┼========================================┤
 //	│       0 │ runestone    │ rune protocol main output              │
 //	├─────────┼──────────────┼────────────────────────────────────────┤
-//	│       1 │ rune output  │ mandatory, output to link runes        │
+//	│ 1 - psf │ rune output  │ mandatory, output to link runes        │
 //	│         │              │ to recipient.                          │
+//	│         │              │       (psf - premine slpitting factor) │
 //	├─────────┼──────────────┼────────────────────────────────────────┤
-//	│       2 │ base output  │ outputs to change bitcoin amount.      │
+//	│ psf + 1 │ base output  │ outputs to change bitcoin amount.      │
 //	│         │              │ 99% mandatory, if any non-dust left.   │
 //	└─────────┴──────────────┴────────────────────────────────────────┘
 func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRuneEtchTxResult, err error) {
@@ -1000,6 +1025,10 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	if params.Inscription == nil {
 		return result, errors.New("inscription data is required")
 	}
+	if params.Rune != nil && params.Rune.Premine != nil && numbers.IsPositive(params.Rune.Premine) &&
+		params.PremineSplittingFactor > 1 && numbers.IsGreater(big.NewInt(int64(params.PremineSplittingFactor)), params.Rune.Premine) {
+		return result, errors.New("premine splitting factor is grater then premine")
+	}
 	if len(params.InscriptionReveal.UTXOs) != 1 {
 		return result, fmt.Errorf("invalid inscription utxo data len: %d, must be: 1", len(params.InscriptionReveal.UTXOs))
 	}
@@ -1008,25 +1037,28 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		pointerValue           uint32 = 1
 		inscriptionWitnessSize int
 		prepareUTXOsResult     PrepareUTXOsResult
+		runeOutputs            = 1
+		totalOutputs           = 1
 	)
 
-	bitcoinAmount := new(big.Int).Set(params.InscriptionReveal.UTXOs[0].Amount)
-
-	runestone := &runes.Runestone{
-		Etching: params.Rune,
-		Pointer: &pointerValue,
+	if params.Rune.Premine != nil && numbers.IsPositive(params.Rune.Premine) && params.PremineSplittingFactor > 1 {
+		runeOutputs = int(params.PremineSplittingFactor)
 	}
+
+	totalOutputs += runeOutputs
+
+	bitcoinAmount := new(big.Int).Set(params.InscriptionReveal.UTXOs[0].Amount)
 
 	inscriptionWitnessSize, err = params.Inscription.VBytesSize()
 	if err != nil {
 		return result, err
 	}
 
-	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte)
-	transferAmount := new(big.Int).Add(etchTransactionFee, nonDustBitcoinAmount)
+	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte, runeOutputs)
+	transferAmount := new(big.Int).Add(etchTransactionFee, new(big.Int).Mul(nonDustBitcoinAmount, big.NewInt(int64(runeOutputs))))
 	if numbers.IsGreater(transferAmount, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
-			return result, InsufficientNativeBalanceError.clarify(etchTransactionFee, params.InscriptionReveal.UTXOs[0].Amount)
+			return result, InsufficientNativeBalanceError.clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount)
 		}
 
 		prepareUTXOsResult, err = PrepareUTXOs(PrepareUTXOsParams{
@@ -1044,11 +1076,6 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		etchTransactionFee.Add(etchTransactionFee, prepareUTXOsResult.RoughEstimate)
 	}
 
-	runestoneData, err := runestone.IntoScript()
-	if err != nil {
-		return result, err
-	}
-
 	tx := wire.NewMsgTx(txVersion)
 	for _, i := range append([]*bitcoin.UTXO{&params.InscriptionReveal.UTXOs[0]}, prepareUTXOsResult.UsedUTXOs...) {
 		utxoHash, err := chainhash.NewHashFromStr(i.TxHash)
@@ -1062,22 +1089,52 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	// subtract fee.
 	bitcoinAmount.Sub(bitcoinAmount, etchTransactionFee)
 
-	// runestone output (#0).
-	tx.AddTxOut(wire.NewTxOut(0, runestoneData))
-
-	// recipient runes output (#1).
-	err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RunesRecipientAddress)
-	if err != nil {
-		return result, err
+	// recipient runes output (#1 - psf).
+	for i := 0; i < runeOutputs; i++ {
+		err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RunesRecipientAddress)
+		if err != nil {
+			return result, err
+		}
 	}
 
-	// change btc output (#2).
+	// change btc output (#psf+1).
 	if numbers.IsPositive(bitcoinAmount) && numbers.IsGreater(bitcoinAmount, nonDustBitcoinAmount) {
 		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.SatoshiChangeAddress)
 		if err != nil {
 			return result, err
 		}
+
+		totalOutputs++
 	}
+
+	runestone := &runes.Runestone{
+		Etching: params.Rune,
+		Pointer: &pointerValue,
+	}
+	if runeOutputs > 1 {
+		runestone.Pointer = nil
+		quo, rem := new(big.Int).QuoRem(params.Rune.Premine, big.NewInt(int64(runeOutputs)), new(big.Int))
+		if !numbers.IsZero(rem) {
+			runestone.Edicts = append(runestone.Edicts, runes.Edict{
+				RuneID: runes.RuneID{},
+				Amount: rem,
+				Output: 1,
+			})
+		}
+		runestone.Edicts = append(runestone.Edicts, runes.Edict{
+			RuneID: runes.RuneID{},
+			Amount: quo,
+			Output: uint32(totalOutputs),
+		})
+	}
+
+	runestoneData, err := runestone.IntoScript()
+	if err != nil {
+		return result, err
+	}
+
+	// runestone output (#0).
+	tx.TxOut = append([]*wire.TxOut{wire.NewTxOut(0, runestoneData)}, tx.TxOut...)
 
 	result.UnsignedRawTx = tx
 	result.InscriptionReveal = params.Inscription
@@ -1312,19 +1369,19 @@ func RoughTxSizeEstimate(inputs, outputs int) *big.Int {
 
 // RoughEtchFeeEstimate returns etch transaction rough estimate in satoshi.
 // TODO: increase precision.
-func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int) (etchTransactionFee *big.Int) {
+func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int, premineSplittingFactor int) (etchTransactionFee *big.Int) {
 	// INFO:
 	// header: static value [vB]
 	// inputs: inscription witness data + raw inscription input size [vB]
-	// outputs: runes protocol, runes recipient, btc change [vB]
+	// outputs: runes protocol, runes recipient * premine splitting factor, btc change [vB]
 	// (header + inputs + outputs) * fee rate / 1000 = tx fee in satoshi
 	// [vB] * 1000 [sat/vB] / 1000 = sat.
 	//
 	// estimate runes protocol as maximum possible (3 * simple output ~ 80-90 vB).
-	etchTransactionFee = new(big.Int).Add(inscriptionInputSizeVBytes, inscriptionWitnessSize) // inputs [vB].
-	etchTransactionFee.Add(etchTransactionFee, RoughTxSizeEstimate(0, 3+2))                   // outputs + header [vB].
-	etchTransactionFee.Mul(etchTransactionFee, satoshiPerKVByte)                              // multiply by fee rate [vB * 1000(sat/vB)].
-	etchTransactionFee.Div(etchTransactionFee, big.NewInt(1000))                              // reduce kilo value [sat].
+	etchTransactionFee = new(big.Int).Add(inscriptionInputSizeVBytes, inscriptionWitnessSize)      // inputs [vB].
+	etchTransactionFee.Add(etchTransactionFee, RoughTxSizeEstimate(0, 2+2+premineSplittingFactor)) // outputs + header [vB].
+	etchTransactionFee.Mul(etchTransactionFee, satoshiPerKVByte)                                   // multiply by fee rate [vB * 1000(sat/vB)].
+	etchTransactionFee.Div(etchTransactionFee, big.NewInt(1000))                                   // reduce kilo value [sat].
 
 	return etchTransactionFee
 }

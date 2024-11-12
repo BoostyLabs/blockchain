@@ -4,12 +4,14 @@
 package txbuilder_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"math/big"
 	"math/rand"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcutil/psbt"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/stretchr/testify/require"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
+	"github.com/BoostyLabs/blockchain/internal/numbers"
 )
 
 func TestTxBuilder(t *testing.T) {
@@ -347,6 +350,32 @@ func TestTxBuilder(t *testing.T) {
 					CommissionReceiverAddress: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
 				},
 			},
+			{
+				"cHNidP8BAH4CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXBAAAAAD/////AjMMAAAAAAAAIlEgo5FkqP6gH/aAcA2jr3Pmcup6Y/YeKSLHDN3hMIcCiZUgWgAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAABIAEAAAEBJXhpAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQQWABTz6zxFOwEUHmAr6y0TNfa+UHuBOAAAAA==",
+				nil,
+				txbuilder.BaseInscriptionTxParams{
+					Sender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(27000), // 0.00027 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+							},
+						},
+						Address: "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					SatoshiPerKVByte: big.NewInt(5000), // 5 sat/vB.
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					InscriptionBasePubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					PremineSplittingFactor: 3,
+				},
+			},
 		}
 		for _, test := range tests {
 			result, err := txBuilder.BuildInscriptionTx(test.params)
@@ -551,6 +580,283 @@ func TestTxBuilder(t *testing.T) {
 			result, err := txBuilder.BuildRuneEtchTx(test.params)
 			require.NoError(t, err)
 			require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
+		}
+	})
+
+	t.Run("BuildRuneEtchTx with primine splitting factor", func(t *testing.T) {
+		rune_, err := runes.NewRuneFromString("HELLO")
+		require.NoError(t, err)
+
+		tests := []struct {
+			name            string
+			expectedTxB64   string
+			expectedOutputs int
+			edictsSize      int
+			pointer         *uint32
+			changePresent   bool
+			params          txbuilder.BaseRuneEtchTxParams
+		}{
+			{
+				name:            "psf - 0, no change",
+				expectedTxB64:   "cHNidP8BAH8CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AgAAAAAAAAAAGGpdFQEFAgEDJQS+geUBBV0GgJTr3AMWASICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQAAAAAAAEBJcMGAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQU6IPWKKphlgv/WgOVy8kE/7qbOBdrYvtAE/lomIZgxKGf6rABjA29yZAENA75AOQAJdGVzdCBkYXRhaAEXIPWKKphlgv/WgOVy8kE/7qbOBdrYvtAE/lomIZgxKGf6AAAA",
+				expectedOutputs: 2,
+				edictsSize:      0,
+				pointer:         toPointer[uint32](1),
+				changePresent:   false,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(1731), // no change.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 0,
+				},
+			},
+			{
+				name:            "psf - 0 + change",
+				expectedTxB64:   "cHNidP8BAJ8CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AwAAAAAAAAAAGGpdFQEFAgEDJQS+geUBBV0GgJTr3AMWASICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQjAgAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAAAAQEl5ggAAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABBTog9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/qsAGMDb3JkAQ0DvkA5AAl0ZXN0IGRhdGFoARcg9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/oAAAAA",
+				expectedOutputs: 3,
+				edictsSize:      0,
+				pointer:         toPointer[uint32](1),
+				changePresent:   true,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(2278), // 546 change.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 0,
+				},
+			},
+			{
+				name:            "psf - 1, no change",
+				expectedTxB64:   "cHNidP8BAH8CAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AgAAAAAAAAAAGGpdFQEFAgEDJQS+geUBBV0GgJTr3AMWASICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQAAAAAAAEBJcMGAAAAAAAAHF9iaXRjb2luX3RyYW5zYWN0aW9uX3NjcmlwdF8BAwQBAAAAAQU6IPWKKphlgv/WgOVy8kE/7qbOBdrYvtAE/lomIZgxKGf6rABjA29yZAENA75AOQAJdGVzdCBkYXRhaAEXIPWKKphlgv/WgOVy8kE/7qbOBdrYvtAE/lomIZgxKGf6AAAA",
+				expectedOutputs: 2,
+				edictsSize:      0,
+				pointer:         toPointer[uint32](1),
+				changePresent:   false,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(1731), // no change.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 1,
+				},
+			},
+			{
+				name:            "psf - 2, no change, divisible",
+				expectedTxB64:   "cHNidP8BALECAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////AwAAAAAAAAAAH2pdHAEFAgEDJQS+geUBBV0GgJTr3AMAAACAyrXuAQMiAgAAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkIgIAAAAAAAAiUSDJNteVAzZwcCPLnRgIbT6Xk34xxXH/zsdw2IQLjiBaZAAAAAAAAQElewkAAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABBTog9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/qsAGMDb3JkAQ0DvkA5AAl0ZXN0IGRhdGFoARcg9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/oAAAAA",
+				expectedOutputs: 3,
+				edictsSize:      1,
+				pointer:         nil,
+				changePresent:   false,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(2427), // no change.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 2,
+				},
+			},
+			{
+				name:            "psf - 3, no change, not divisible",
+				expectedTxB64:   "cHNidP8BAOACAAAAAUZXKFP369ZOSUKg4F+781Lp64ePDidu1UPsQxzWUorXAgAAAAD/////BAAAAAAAAAAAI2pdIAEFAgEDJQS+geUBBV0GgJTr3AMAAAABAQAA1Yb5ngEEIgIAAAAAAAAiUSDJNteVAzZwcCPLnRgIbT6Xk34xxXH/zsdw2IQLjiBaZCICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQiAgAAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkAAAAAAABASUzDAAAAAAAABxfYml0Y29pbl90cmFuc2FjdGlvbl9zY3JpcHRfAQMEAQAAAAEFOiD1iiqYZYL/1oDlcvJBP+6mzgXa2L7QBP5aJiGYMShn+qwAYwNvcmQBDQO+QDkACXRlc3QgZGF0YWgBFyD1iiqYZYL/1oDlcvJBP+6mzgXa2L7QBP5aJiGYMShn+gAAAAAA",
+				expectedOutputs: 4,
+				edictsSize:      2,
+				pointer:         nil,
+				changePresent:   false,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(3123), // no change.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 3,
+				},
+			},
+			{
+				name:            "psf - 3, change, not divisible",
+				expectedTxB64:   "cHNidP8BAP0AAQIAAAABRlcoU/fr1k5JQqDgX7vzUunrh48OJ27VQ+xDHNZSitcCAAAAAP////8FAAAAAAAAAAAjal0gAQUCAQMlBL6B5QEFXQaAlOvcAwAAAAEBAADVhvmeAQUiAgAAAAAAACJRIMk215UDNnBwI8udGAhtPpeTfjHFcf/Ox3DYhAuOIFpkIgIAAAAAAAAiUSDJNteVAzZwcCPLnRgIbT6Xk34xxXH/zsdw2IQLjiBaZCICAAAAAAAAIlEgyTbXlQM2cHAjy50YCG0+l5N+McVx/87HcNiEC44gWmQjAgAAAAAAABepFKpYjpRh5/yszRC1NNtHIt1yMSLBhwAAAAAAAQElVg4AAAAAAAAcX2JpdGNvaW5fdHJhbnNhY3Rpb25fc2NyaXB0XwEDBAEAAAABBTog9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/qsAGMDb3JkAQ0DvkA5AAl0ZXN0IGRhdGFoARcg9YoqmGWC/9aA5XLyQT/ups4F2ti+0AT+WiYhmDEoZ/oAAAAAAAA=",
+				expectedOutputs: 5,
+				edictsSize:      2,
+				pointer:         nil,
+				changePresent:   false,
+				params: txbuilder.BaseRuneEtchTxParams{
+					InscriptionReveal: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(3670), // change 546.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+							},
+						},
+						Address: "tb1p5wgkf2875q0ldqrspk367ulxwt485clkrc5j93cvmhsnppcz3x2srcptmt",
+						PubKey:  "02f58a2a986582ffd680e572f2413feea6ce05dad8bed004fe5a262198312867fa",
+					},
+					Inscription: &inscriptions.Inscription{
+						Rune: rune_,
+						Body: []byte("test data"),
+					},
+					Rune: &runes.Etching{
+						Divisibility: toPointer(byte(5)),
+						Premine:      big.NewInt(1000000000),
+						Rune:         rune_,
+						Spacers:      toPointer(uint32(37)),
+						Symbol:       toPointer(']'),
+					},
+					SatoshiPerKVByte:       big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress:  "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+					SatoshiChangeAddress:   "2N8mvwwUPfXt8FczXvE1UvM8ioVTW9LQLj1",
+					PremineSplittingFactor: 3,
+				},
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result, err := txBuilder.BuildRuneEtchTx(test.params)
+				require.NoError(t, err)
+				require.EqualValues(t, test.expectedTxB64, base64.StdEncoding.EncodeToString(result.SerializedPSBT))
+
+				p, err := psbt.NewFromRawBytes(bytes.NewReader(result.SerializedPSBT), false)
+				require.NoError(t, err)
+
+				tx := p.UnsignedTx
+				require.Len(t, tx.TxOut, test.expectedOutputs)
+
+				runestore, err := runes.ParseRunestone(tx.TxOut[0].PkScript)
+				require.NoError(t, err)
+
+				require.Len(t, runestore.Edicts, test.edictsSize)
+				require.Equal(t, test.pointer, runestore.Pointer)
+
+				if test.edictsSize == 1 {
+					require.EqualValues(t, test.expectedOutputs, runestore.Edicts[0].Output)
+					require.True(t, numbers.IsEqual(test.params.Rune.Premine,
+						new(big.Int).Mul(runestore.Edicts[0].Amount, big.NewInt(int64(test.params.PremineSplittingFactor)))))
+				}
+				if test.edictsSize == 2 {
+					require.EqualValues(t, 1, runestore.Edicts[0].Output)
+					require.EqualValues(t, test.expectedOutputs, runestore.Edicts[1].Output)
+
+					sum := new(big.Int).Mul(runestore.Edicts[1].Amount, big.NewInt(int64(test.params.PremineSplittingFactor)))
+					sum.Add(sum, runestore.Edicts[0].Amount)
+					require.True(t, numbers.IsEqual(test.params.Rune.Premine, sum))
+				}
+			})
 		}
 	})
 }
