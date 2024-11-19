@@ -92,9 +92,10 @@ func NewPSBTInputBuilder(pubKey, address string, networkParams *chaincfg.Params)
 	}
 
 	switch pib.scriptType {
-	case P2PK, P2PKH, P2SH:
+	case P2PK, P2PKH, P2SH, P2WPKH:
 		pib.redeemScript, err = txscript.PayToAddrScript(pib.address)
-	case P2WPKH, P2WSH:
+	case P2WSH:
+		// TODO: figure out.
 		pib.witnessScript, err = txscript.PayToAddrScript(pib.address)
 	}
 	if err != nil {
@@ -109,9 +110,10 @@ func (pib *PSBTInputBuilder) PrepareInput(input *psbt.PInput) {
 	switch pib.scriptType {
 	case P2TR:
 		input.TaprootInternalKey = pib.xOnlyPubKey
-	case P2PK, P2PKH, P2SH:
+	case P2PK, P2PKH, P2SH, P2WPKH:
 		input.RedeemScript = pib.redeemScript
-	case P2WPKH, P2WSH:
+	case P2WSH:
+		// TODO: Figure out.
 		input.WitnessScript = pib.witnessScript
 	}
 }
