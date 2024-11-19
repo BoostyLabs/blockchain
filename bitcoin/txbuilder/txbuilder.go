@@ -5,12 +5,10 @@ package txbuilder
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
 
-	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcutil/psbt"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -31,8 +29,6 @@ var (
 	InsufficientRuneBalanceError = &InsufficientError{Type: InsufficientErrorTypeRune}
 	// ErrInvalidUTXOAmount describes that there was invalid UTXO amount transmitted.
 	ErrInvalidUTXOAmount = errors.New("invalid UTXO amount")
-	// ErrPrepareAddressData defines errors class for prepare address data method.
-	ErrPrepareAddressData = errors.New("prepare address data")
 )
 
 const (
@@ -432,53 +428,36 @@ func (b *TxBuilder) buildRunesTransferPSBT(params BuildRunesTransferPSBTParams) 
 		return nil, err
 	}
 
-	runesSenderAddressData, err := b.prepareAddressData(params.RunesSenderPubKey, params.RunesSenderAddress)
+	runesSenderInputBuilder, err := NewPSBTInputBuilder(params.RunesSenderPubKey, params.RunesSenderAddress, b.networkParams)
 	if err != nil {
 		return nil, err
 	}
 
-	feePayerAddressData, err := b.prepareAddressData(params.FeePayerPubKey, params.FeePayerAddress)
+	feePayerAddressInputBuilder, err := NewPSBTInputBuilder(params.FeePayerPubKey, params.FeePayerAddress, b.networkParams)
 	if err != nil {
 		return nil, err
 	}
 
 	senderIndexes := make([]byte, len(params.UsedRuneUTXOs))
 	for i, utxo := range params.UsedRuneUTXOs {
-		switch runesSenderAddressData.addrType {
-		case TaprootInputsHelpingKey:
-			p.Inputs[i].TaprootInternalKey = runesSenderAddressData.publicKeyBytes
-		case PaymentInputsHelpingKey:
-			p.Inputs[i].RedeemScript = runesSenderAddressData.witnessProg
-		}
+		runesSenderInputBuilder.PrepareInput(&(p.Inputs[i]))
 		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 		p.Inputs[i].SighashType = signHashType
 		senderIndexes[i] = byte(i)
 	}
 
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: runesSenderAddressData.addrType.Bytes(), Value: senderIndexes})
-
-	switch feePayerAddressData.addrType {
-	case TaprootInputsHelpingKey:
-		feePayerAddressData.addrType = FeePayerTaprootInputsHelpingKey
-	case PaymentInputsHelpingKey:
-		feePayerAddressData.addrType = FeePayerPaymentInputsHelpingKey
-	}
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: runesSenderInputBuilder.InputsHelpingKey(false).Bytes(), Value: senderIndexes})
 
 	shift := len(params.UsedRuneUTXOs) // sender runes utxos inputs shift.
 	feePayerIndexes := make([]byte, len(params.UsedBaseUTXOs))
 	for i, utxo := range params.UsedBaseUTXOs {
-		switch feePayerAddressData.addrType {
-		case FeePayerTaprootInputsHelpingKey:
-			p.Inputs[shift+i].TaprootInternalKey = feePayerAddressData.publicKeyBytes
-		case FeePayerPaymentInputsHelpingKey:
-			p.Inputs[shift+i].RedeemScript = feePayerAddressData.witnessProg
-		}
+		feePayerAddressInputBuilder.PrepareInput(&(p.Inputs[shift+i]))
 		p.Inputs[shift+i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 		p.Inputs[shift+i].SighashType = signHashType
 		feePayerIndexes[i] = byte(shift + i)
 	}
 
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerAddressData.addrType.Bytes(), Value: feePayerIndexes})
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerAddressInputBuilder.InputsHelpingKey(true).Bytes(), Value: feePayerIndexes})
 
 	w := bytes.NewBuffer(nil)
 	err = p.Serialize(w)
@@ -698,16 +677,16 @@ func (b *TxBuilder) buildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 	}
 
 	var (
-		senderAddressData   addressData
-		feePayerAddressData addressData
+		senderInputBuilder   *PSBTInputBuilder
+		feePayerInputBuilder *PSBTInputBuilder
 	)
-	senderAddressData, err = b.prepareAddressData(params.SenderPubKey, params.SenderAddress)
+	senderInputBuilder, err = NewPSBTInputBuilder(params.SenderPubKey, params.SenderAddress, b.networkParams)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(params.UsedFeePayerBaseUTXOs) != 0 {
-		feePayerAddressData, err = b.prepareAddressData(params.FeePayerPubKey, params.FeePayerAddress)
+		feePayerInputBuilder, err = NewPSBTInputBuilder(params.FeePayerPubKey, params.FeePayerAddress, b.networkParams)
 		if err != nil {
 			return nil, err
 		}
@@ -715,42 +694,25 @@ func (b *TxBuilder) buildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 
 	senderIndexes := make([]byte, len(params.UsedSenderBaseUTXOs))
 	for i, utxo := range params.UsedSenderBaseUTXOs {
-		switch senderAddressData.addrType {
-		case TaprootInputsHelpingKey:
-			p.Inputs[i].TaprootInternalKey = senderAddressData.publicKeyBytes
-		case PaymentInputsHelpingKey:
-			p.Inputs[i].RedeemScript = senderAddressData.witnessProg
-		}
+		senderInputBuilder.PrepareInput(&(p.Inputs[i]))
 		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 		p.Inputs[i].SighashType = signHashType
 		senderIndexes[i] = byte(i)
 	}
 
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: senderAddressData.addrType.Bytes(), Value: senderIndexes})
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: senderInputBuilder.InputsHelpingKey(false).Bytes(), Value: senderIndexes})
 
 	if len(params.UsedFeePayerBaseUTXOs) != 0 {
-		switch feePayerAddressData.addrType {
-		case TaprootInputsHelpingKey:
-			feePayerAddressData.addrType = FeePayerTaprootInputsHelpingKey
-		case PaymentInputsHelpingKey:
-			feePayerAddressData.addrType = FeePayerPaymentInputsHelpingKey
-		}
-
 		shift := len(params.UsedSenderBaseUTXOs) // sender utxos inputs shift.
 		feePayerIndexes := make([]byte, len(params.UsedFeePayerBaseUTXOs))
 		for i, utxo := range params.UsedFeePayerBaseUTXOs {
-			switch feePayerAddressData.addrType {
-			case FeePayerTaprootInputsHelpingKey:
-				p.Inputs[shift+i].TaprootInternalKey = feePayerAddressData.publicKeyBytes
-			case FeePayerPaymentInputsHelpingKey:
-				p.Inputs[shift+i].RedeemScript = feePayerAddressData.witnessProg
-			}
+			feePayerInputBuilder.PrepareInput(&(p.Inputs[shift+i]))
 			p.Inputs[shift+i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 			p.Inputs[shift+i].SighashType = signHashType
 			feePayerIndexes[i] = byte(shift + i)
 		}
 
-		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerAddressData.addrType.Bytes(), Value: feePayerIndexes})
+		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: feePayerInputBuilder.InputsHelpingKey(true).Bytes(), Value: feePayerIndexes})
 	}
 
 	w := bytes.NewBuffer(nil)
@@ -921,25 +883,20 @@ func (b *TxBuilder) buildInscriptionTxPSBT(params BuildInscriptionTxPSBTParams) 
 		return nil, err
 	}
 
-	senderAddressData, err := b.prepareAddressData(params.SenderPubKey, params.SenderAddress)
+	senderInputBuilder, err := NewPSBTInputBuilder(params.SenderPubKey, params.SenderAddress, b.networkParams)
 	if err != nil {
 		return nil, err
 	}
 
 	senderIndexes := make([]byte, len(params.UsedBaseUTXOs))
 	for i, utxo := range params.UsedBaseUTXOs {
-		switch senderAddressData.addrType {
-		case TaprootInputsHelpingKey:
-			p.Inputs[i].TaprootInternalKey = senderAddressData.publicKeyBytes
-		case PaymentInputsHelpingKey:
-			p.Inputs[i].RedeemScript = senderAddressData.witnessProg
-		}
+		senderInputBuilder.PrepareInput(&(p.Inputs[i]))
 		p.Inputs[i].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 		p.Inputs[i].SighashType = signHashType
 		senderIndexes[i] = byte(i)
 	}
 
-	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: senderAddressData.addrType.Bytes(), Value: senderIndexes})
+	p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: senderInputBuilder.InputsHelpingKey(false).Bytes(), Value: senderIndexes})
 
 	w := bytes.NewBuffer(nil)
 	err = p.Serialize(w)
@@ -1153,12 +1110,12 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 		return nil, err
 	}
 
-	inscriptionAddressData, err := b.prepareAddressData(params.InscriptionBasePubKey, params.InscriptionBaseAddress)
+	inscriptionInputBuilder, err := NewPSBTInputBuilder(params.InscriptionBasePubKey, params.InscriptionBaseAddress, b.networkParams)
 	if err != nil {
 		return nil, err
 	}
 
-	inscriptionScript, err := params.InscriptionReveal.IntoScriptForWitness(inscriptionAddressData.publicKeyBytes)
+	inscriptionScript, err := params.InscriptionReveal.IntoScriptForWitness(inscriptionInputBuilder.xOnlyPubKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,14 +1124,14 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 	// tapLeaf := txscript.NewBaseTapLeaf(inscriptionScript)
 	// tapScriptTree := txscript.AssembleTaprootScriptTree(tapLeaf)
 	//
-	// ctrlBlock := tapScriptTree.LeafMerkleProofs[0].ToControlBlock(inscriptionAddressData.publicKeyBtcec)
+	// ctrlBlock := tapScriptTree.LeafMerkleProofs[0].ToControlBlock(inscriptionInputBuilder.publicKeyBtcec)
 	// ctrlBlockBytes, err := ctrlBlock.ToBytes()
 	// if err != nil {
 	//	return nil, err
 	// }.
 
 	p.Inputs[0].SighashType = signHashType
-	p.Inputs[0].TaprootInternalKey = inscriptionAddressData.publicKeyBytes
+	inscriptionInputBuilder.PrepareInput(&(p.Inputs[0]))
 	p.Inputs[0].WitnessUtxo = wire.NewTxOut(params.InscriptionUTXO.Amount.Int64(), params.InscriptionUTXO.Script)
 	p.Inputs[0].WitnessScript = inscriptionScript
 	// TODO: Figure out.
@@ -1185,26 +1142,20 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 	// }}.
 
 	if len(params.UsedAdditionalBaseUTXOs) != 0 {
-		additionalPaymentAddressData, err := b.prepareAddressData(params.AdditionalPaymentsPubKey, params.AdditionalPaymentsAddress)
+		additionalPaymentInputBuilder, err := NewPSBTInputBuilder(params.AdditionalPaymentsPubKey, params.AdditionalPaymentsAddress, b.networkParams)
 		if err != nil {
 			return nil, err
 		}
 
 		indexes := make([]byte, len(params.UsedAdditionalBaseUTXOs))
 		for i, utxo := range params.UsedAdditionalBaseUTXOs {
-			switch additionalPaymentAddressData.addrType {
-			case FeePayerTaprootInputsHelpingKey:
-				p.Inputs[i+1].TaprootInternalKey = additionalPaymentAddressData.publicKeyBytes
-			case FeePayerPaymentInputsHelpingKey:
-				p.Inputs[i+1].RedeemScript = additionalPaymentAddressData.witnessProg
-			}
-
+			additionalPaymentInputBuilder.PrepareInput(&(p.Inputs[i+1]))
 			p.Inputs[i+1].WitnessUtxo = wire.NewTxOut(utxo.Amount.Int64(), utxo.Script)
 			p.Inputs[i+1].SighashType = signHashType
 			indexes[i] = byte(i + 1)
 		}
 
-		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: additionalPaymentAddressData.addrType.Bytes(), Value: indexes})
+		p.Unknowns = append(p.Unknowns, &psbt.Unknown{Key: additionalPaymentInputBuilder.InputsHelpingKey(true).Bytes(), Value: indexes})
 	}
 
 	w := bytes.NewBuffer(nil)
@@ -1214,62 +1165,6 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 	}
 
 	return w.Bytes(), nil
-}
-
-// addressData defines helping address data to build psbt.
-type addressData struct {
-	addrType       InputsHelpingKey
-	publicKeyBytes []byte
-	publicKeyBtcec *btcec.PublicKey
-	witness        *btcutil.AddressWitnessPubKeyHash
-	witnessProg    []byte
-}
-
-// prepareAddressData returns addressData from public key and address.
-func (b *TxBuilder) prepareAddressData(pk, address string) (result addressData, err error) {
-	defer func(err *error) {
-		if err != nil && *err != nil {
-			*err = errors.Join(ErrPrepareAddressData, *err)
-		}
-	}(&err)
-
-	result.publicKeyBytes, err = hex.DecodeString(pk)
-	if err != nil {
-		return result, err
-	}
-
-	addressType, err := btcutil.DecodeAddress(address, b.networkParams)
-	if err != nil {
-		return result, err
-	}
-
-	switch addressType.(type) {
-	case *btcutil.AddressTaproot, *btcutil.AddressWitnessPubKeyHash, *btcutil.AddressWitnessScriptHash, *btcutil.AddressSegWit:
-		result.addrType = TaprootInputsHelpingKey
-		if len(result.publicKeyBytes) == 33 {
-			result.publicKeyBytes = result.publicKeyBytes[1:]
-		}
-	case *btcutil.AddressPubKeyHash, *btcutil.AddressPubKey, *btcutil.AddressScriptHash:
-		result.addrType = PaymentInputsHelpingKey
-		result.publicKeyBtcec, err = btcec.ParsePubKey(result.publicKeyBytes)
-		if err != nil {
-			return result, err
-		}
-
-		result.witness, err = btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(result.publicKeyBtcec.SerializeCompressed()), b.networkParams)
-		if err != nil {
-			return result, err
-		}
-
-		result.witnessProg, err = txscript.PayToAddrScript(result.witness)
-		if err != nil {
-			return result, err
-		}
-	default:
-		return result, btcutil.ErrUnknownAddressType
-	}
-
-	return result, nil
 }
 
 // PrepareUTXOs selects utxos to cover rough estimated fee.
