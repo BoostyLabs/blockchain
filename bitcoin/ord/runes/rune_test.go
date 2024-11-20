@@ -208,13 +208,107 @@ func TestRunes(t *testing.T) {
 		}
 	})
 
-	t.Run("RuneReserve", func(t *testing.T) {
+	t.Run("MinNameLength", func(t *testing.T) {
 		tests := []struct {
 			block    uint64
 			expected int
 		}{{0, 13}, {839999, 13}, {840000, 12}, {857499, 12}, {857500, 11}, {1032500, 1}, {1050000, 0}, {1050001, 0}}
 		for _, test := range tests {
 			require.EqualValues(t, test.expected, runes.MinNameLength(test.block), "%d -> %d", test.block, test.expected)
+		}
+	})
+
+	t.Run("MinAtHeight for lengths", func(t *testing.T) {
+		tests := []struct {
+			block    uint64
+			expected int
+		}{{0, 13}, {839999, 13}, {840000, 12}, {857499, 12}, {857500, 11}, {1032500, 2}, {1050000, 1}, {1050001, 1}}
+		for _, test := range tests {
+			runeStr := runes.MinAtHeight(test.block).String()
+			require.EqualValues(t, test.expected, len(runeStr), "%d -> %d (%s)", test.block, test.expected, runeStr)
+		}
+	})
+
+	t.Run("MinAtHeight (Mainnet)", func(t *testing.T) {
+		start := runes.ProtocolBlockStart
+		end := start + runes.SubsidyHalvingInterval
+		interval := runes.UnlockNamePeriod
+		tests := []struct {
+			height  uint64
+			minimum string
+		}{
+			{0, "AAAAAAAAAAAAA"},
+			{start / 2, "AAAAAAAAAAAAA"},
+			{start, "ZZYZXBRKWXVA"},
+			{start + 1, "ZZXZUDIVTVQA"},
+			{end - 1, "A"},
+			{end, "A"},
+			{end + 1, "A"},
+			{1<<32 - 1, "A"},
+
+			{start + interval*0 - 1, "AAAAAAAAAAAAA"},
+			{start + interval*0 + 0, "ZZYZXBRKWXVA"},
+			{start + interval*0 + 1, "ZZXZUDIVTVQA"},
+
+			{start + interval*1 - 1, "AAAAAAAAAAAA"},
+			{start + interval*1 + 0, "ZZYZXBRKWXV"},
+			{start + interval*1 + 1, "ZZXZUDIVTVQ"},
+
+			{start + interval*2 - 1, "AAAAAAAAAAA"},
+			{start + interval*2 + 0, "ZZYZXBRKWY"},
+			{start + interval*2 + 1, "ZZXZUDIVTW"},
+
+			{start + interval*3 - 1, "AAAAAAAAAA"},
+			{start + interval*3 + 0, "ZZYZXBRKX"},
+			{start + interval*3 + 1, "ZZXZUDIVU"},
+
+			{start + interval*4 - 1, "AAAAAAAAA"},
+			{start + interval*4 + 0, "ZZYZXBRL"},
+			{start + interval*4 + 1, "ZZXZUDIW"},
+
+			{start + interval*5 - 1, "AAAAAAAA"},
+			{start + interval*5 + 0, "ZZYZXBS"},
+			{start + interval*5 + 1, "ZZXZUDJ"},
+
+			{start + interval*6 - 1, "AAAAAAA"},
+			{start + interval*6 + 0, "ZZYZXC"},
+			{start + interval*6 + 1, "ZZXZUE"},
+
+			{start + interval*7 - 1, "AAAAAA"},
+			{start + interval*7 + 0, "ZZYZY"},
+			{start + interval*7 + 1, "ZZXZV"},
+
+			{start + interval*8 - 1, "AAAAA"},
+			{start + interval*8 + 0, "ZZZA"},
+			{start + interval*8 + 1, "ZZYA"},
+
+			{start + interval*9 - 1, "AAAA"},
+			{start + interval*9 + 0, "ZZZ"},
+			{start + interval*9 + 1, "ZZY"},
+
+			{start + interval*10 - 2, "AAC"},
+			{start + interval*10 - 1, "AAA"},
+			{start + interval*10 + 0, "AAA"},
+			{start + interval*10 + 1, "AAA"},
+
+			{start + interval*10 + interval/2, "NA"},
+
+			{start + interval*11 - 2, "AB"},
+			{start + interval*11 - 1, "AA"},
+			{start + interval*11 + 0, "AA"},
+			{start + interval*11 + 1, "AA"},
+
+			{start + interval*11 + interval/2, "N"},
+
+			{start + interval*12 - 2, "B"},
+			{start + interval*12 - 1, "A"},
+			{start + interval*12 + 0, "A"},
+			{start + interval*12 + 1, "A"},
+		}
+
+		for _, test := range tests {
+			runeStr := runes.MinAtHeight(test.height).String()
+			require.EqualValues(t, test.minimum, runeStr, "%d -> %d (%s)", test.height, test.minimum, runeStr)
 		}
 	})
 }

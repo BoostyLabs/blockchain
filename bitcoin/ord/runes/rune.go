@@ -15,6 +15,9 @@ import (
 const DefaultSpacer = '•'
 
 const (
+	// SubsidyHalvingInterval defines how may blocks between halvings.
+	SubsidyHalvingInterval uint64 = 210_000
+
 	// ProtocolBlockStart defines the block when protocol was launched.
 	ProtocolBlockStart uint64 = 840_000
 	// UnlockNamePeriod defines interval in blocks to unlock shorter name.
@@ -23,6 +26,39 @@ const (
 	// StartNameLength defines minimum name length on the ProtocolBlockStart.
 	StartNameLength = 13
 )
+
+// INFO: [Rust impl] definition of name unlocking steps.
+var steps = func() (steps [28]*big.Int) {
+	steps[0], _ = new(big.Int).SetString("0", 10)
+	steps[1], _ = new(big.Int).SetString("26", 10)
+	steps[2], _ = new(big.Int).SetString("702", 10)
+	steps[3], _ = new(big.Int).SetString("18278", 10)
+	steps[4], _ = new(big.Int).SetString("475254", 10)
+	steps[5], _ = new(big.Int).SetString("12356630", 10)
+	steps[6], _ = new(big.Int).SetString("321272406", 10)
+	steps[7], _ = new(big.Int).SetString("8353082582", 10)
+	steps[8], _ = new(big.Int).SetString("217180147158", 10)
+	steps[9], _ = new(big.Int).SetString("5646683826134", 10)
+	steps[10], _ = new(big.Int).SetString("146813779479510", 10)
+	steps[11], _ = new(big.Int).SetString("3817158266467286", 10)
+	steps[12], _ = new(big.Int).SetString("99246114928149462", 10)
+	steps[13], _ = new(big.Int).SetString("2580398988131886038", 10)
+	steps[14], _ = new(big.Int).SetString("67090373691429037014", 10)
+	steps[15], _ = new(big.Int).SetString("1744349715977154962390", 10)
+	steps[16], _ = new(big.Int).SetString("45353092615406029022166", 10)
+	steps[17], _ = new(big.Int).SetString("1179180408000556754576342", 10)
+	steps[18], _ = new(big.Int).SetString("30658690608014475618984918", 10)
+	steps[19], _ = new(big.Int).SetString("797125955808376366093607894", 10)
+	steps[20], _ = new(big.Int).SetString("20725274851017785518433805270", 10)
+	steps[21], _ = new(big.Int).SetString("538857146126462423479278937046", 10)
+	steps[22], _ = new(big.Int).SetString("14010285799288023010461252363222", 10)
+	steps[23], _ = new(big.Int).SetString("364267430781488598271992561443798", 10)
+	steps[24], _ = new(big.Int).SetString("9470953200318703555071806597538774", 10)
+	steps[25], _ = new(big.Int).SetString("246244783208286292431866971536008150", 10)
+	steps[26], _ = new(big.Int).SetString("6402364363415443603228541259936211926", 10)
+	steps[27], _ = new(big.Int).SetString("166461473448801533683942072758341510102", 10)
+	return steps
+}()
 
 // base26 defines 26 as *big.Int.
 var base26 = big.NewInt(26)
@@ -217,4 +253,28 @@ func MinNameLength(currentBlock uint64) int {
 	}
 
 	return 0
+}
+
+// MinAtHeight defines minimum unlocked rune name depending on block height.
+// INFO: [Rust implementation].
+func MinAtHeight(height uint64) *Rune {
+	offset := height + 1
+	start := ProtocolBlockStart
+	end := ProtocolBlockStart + SubsidyHalvingInterval
+
+	if offset < start {
+		return &Rune{value: steps[12]}
+	}
+
+	if offset >= end {
+		return &Rune{value: big.NewInt(0)}
+	}
+
+	progress := offset - start
+	length := 12 - (progress / UnlockNamePeriod)
+	end = steps[length-1].Uint64()
+	start = steps[length].Uint64()
+	remainder := progress % UnlockNamePeriod
+
+	return &Rune{value: new(big.Int).SetUint64(start - ((start - end) * remainder / UnlockNamePeriod))}
 }
