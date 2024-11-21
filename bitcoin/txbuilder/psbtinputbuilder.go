@@ -92,8 +92,16 @@ func NewPSBTInputBuilder(pubKey, address string, networkParams *chaincfg.Params)
 	}
 
 	switch pib.scriptType {
-	case P2PK, P2PKH, P2SH:
+	case P2PK, P2PKH:
 		pib.redeemScript, err = txscript.PayToAddrScript(pib.address)
+	case P2SH:
+		var nested *btcutil.AddressWitnessPubKeyHash
+		nested, err = btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pib.publicKey.SerializeCompressed()), pib.params)
+		if err != nil {
+			return pib, err
+		}
+
+		pib.redeemScript, err = txscript.PayToAddrScript(nested)
 	case P2WPKH:
 		// INFO: Empty redeem and witness scripts.
 	case P2WSH:
