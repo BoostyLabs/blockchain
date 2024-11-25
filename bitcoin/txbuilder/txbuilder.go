@@ -62,8 +62,11 @@ var (
 // BaseRunesTransferParams describes basic data needed to build rune transfer transaction.
 // NOTE: fee payer's utxos should contain btc only, any joined runes will transferred to RunesRecipientAddress.
 type BaseRunesTransferParams struct {
-	RuneID                     runes.RuneID
-	TransferRuneAmount         *big.Int     // runes amount to transfer.
+	RuneID             runes.RuneID
+	TransferRuneAmount *big.Int // runes amount to transfer.
+	// BurnRuneAmount is a runes amount to burn. all burning processes are applied after transferring only.
+	// If burn amount is greater than total transfer amount, then only the absolute difference be burned or 0 (what is greater).
+	BurnRuneAmount             *big.Int
 	RunesSender                *PaymentData // mandatory. must be sorted by rune amount desc.
 	FeePayer                   *PaymentData // mandatory. must be sorted by btc amount desc.
 	SatoshiPerKVByte           *big.Int     // fee rate in satoshi per kilo virtual byte.
@@ -293,8 +296,9 @@ func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) (result
 //	├=========┼==============┼========================================┤
 //	│       0 │ runestone    │ rune protocol main output              │
 //	├─────────┼──────────────┼────────────────────────────────────────┤
-//	│       1 │ rune output  │ mandatory, output to link runes        │
-//	│         │              │ to recipient.                          │
+//	│       1 │ rune output  │ optional, output to link runes         │
+//	│         │              │ to recipient, present if rune transfer │
+//	│         │              │ is positive.                           │
 //	├─────────┼──────────────┼────────────────────────────────────────┤
 //	│       2 │ rune output  │ optional, output to return runes       │
 //	│         │              │ change to sender.                      │
@@ -313,29 +317,55 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	if params.FeePayer == nil {
 		return result, errors.New("fee payer data required")
 	}
+	if params.TransferRuneAmount == nil || numbers.IsNegative(params.TransferRuneAmount) {
+		params.TransferRuneAmount = big.NewInt(0)
+	}
+	if params.BurnRuneAmount == nil || numbers.IsNegative(params.BurnRuneAmount) {
+		params.BurnRuneAmount = big.NewInt(0)
+	}
 
-	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, params.TransferRuneAmount, params.RuneID)
+	totalAllocatingRuneAmount := new(big.Int).Add(params.TransferRuneAmount, params.BurnRuneAmount)
+	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, totalAllocatingRuneAmount, params.RuneID)
 	if err != nil {
 		return result, err
 	}
 
-	runestone := &runes.Runestone{
-		Edicts: []runes.Edict{
-			{
-				RuneID: params.RuneID,
-				Amount: params.TransferRuneAmount,
-				Output: recipientOutput,
-			},
-		},
+	outputs := 2
+	satTransferAmount := big.NewInt(0)
+	runestone := &runes.Runestone{}
+	isRunesTransferred := false
+
+	// runes transfer output + edict.
+	if numbers.IsPositive(params.TransferRuneAmount) {
+		isRunesTransferred = true
+		outputs++
+		satTransferAmount.Add(satTransferAmount, nonDustBitcoinAmount)
+
+		runestone.Edicts = append(runestone.Edicts, runes.Edict{
+			RuneID: params.RuneID,
+			Amount: params.TransferRuneAmount,
+			Output: recipientOutput,
+		})
+	}
+	if numbers.IsPositive(params.BurnRuneAmount) {
+		runestone.Edicts = append(runestone.Edicts, runes.Edict{
+			RuneID: params.RuneID,
+			Amount: params.BurnRuneAmount,
+			Output: 0,
+		})
 	}
 
-	outputs := 3
-	satTransferAmount := big.NewInt(0)
-	if numbers.IsGreater(totalRuneAmount, params.TransferRuneAmount) {
+	// runes return output.
+	if numbers.IsGreater(totalRuneAmount, totalAllocatingRuneAmount) {
 		outputs++
 		satTransferAmount.Add(satTransferAmount, nonDustBitcoinAmount)
 		runestone.Pointer = &returnOutput
+		if !isRunesTransferred {
+			*runestone.Pointer--
+		}
 	}
+
+	// commission output.
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
 		outputs++
 		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
@@ -383,9 +413,11 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	tx.AddTxOut(wire.NewTxOut(0, runestoneData))
 
 	// recipient runes output (#1).
-	err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesRecipientAddress)
-	if err != nil {
-		return result, err
+	if isRunesTransferred {
+		err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesRecipientAddress)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	// change runes output (#2).
