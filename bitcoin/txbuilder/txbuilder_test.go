@@ -467,7 +467,9 @@ func TestTxBuilder(t *testing.T) {
 				},
 			},
 			{
-				"", txbuilder.InsufficientNativeBalanceError,
+				"",
+				insufficientErrWithCauserSender(txbuilder.
+					NewInsufficientError(txbuilder.InsufficientErrorTypeBitcoin, big.NewInt(102686), big.NewInt(27000))),
 				txbuilder.BaseInscriptionTxParams{
 					Sender: &txbuilder.PaymentData{
 						UTXOs: []bitcoin.UTXO{
@@ -1043,4 +1045,9 @@ func TestTxBuilder(t *testing.T) {
 
 func toPointer[T any](val T) *T {
 	return &val
+}
+
+func insufficientErrWithCauserSender(err *txbuilder.InsufficientError) error {
+	err.Causer = txbuilder.CauserSender
+	return err
 }

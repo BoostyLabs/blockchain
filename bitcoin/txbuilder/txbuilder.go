@@ -327,6 +327,10 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	totalAllocatingRuneAmount := new(big.Int).Add(params.TransferRuneAmount, params.BurnRuneAmount)
 	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, totalAllocatingRuneAmount, params.RuneID)
 	if err != nil {
+		if errIns := new(InsufficientError); errors.As(err, &errIns) {
+			return result, errIns.setCauser(CauserSender)
+		}
+
 		return result, err
 	}
 
@@ -379,6 +383,10 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
 	})
 	if err != nil {
+		if errIns := new(InsufficientError); errors.As(err, &errIns) {
+			return result, errIns.setCauser(CauserFeePayer)
+		}
+
 		return result, err
 	}
 
@@ -602,6 +610,10 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 			TransferAmount: satTransferAmount,
 		})
 		if err != nil {
+			if errIns := new(InsufficientError); errors.As(err, &errIns) {
+				return result, errIns.setCauser(CauserSender)
+			}
+
 			return result, err
 		}
 
@@ -613,6 +625,10 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
 		})
 		if err != nil {
+			if errIns := new(InsufficientError); errors.As(err, &errIns) {
+				return result, errIns.setCauser(CauserFeePayer)
+			}
+
 			return result, err
 		}
 
@@ -631,6 +647,10 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
 		})
 		if err != nil {
+			if errIns := new(InsufficientError); errors.As(err, &errIns) {
+				return result, errIns.setCauser(CauserSender)
+			}
+
 			return result, err
 		}
 
@@ -860,6 +880,10 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
 	})
 	if err != nil {
+		if errIns := new(InsufficientError); errors.As(err, &errIns) {
+			return result, errIns.setCauser(CauserSender)
+		}
+
 		return result, err
 	}
 
@@ -1047,7 +1071,9 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	transferAmount := new(big.Int).Add(etchTransactionFee, new(big.Int).Mul(nonDustBitcoinAmount, big.NewInt(int64(runeOutputs))))
 	if numbers.IsGreater(transferAmount, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
-			return result, InsufficientNativeBalanceError.clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount)
+			return result, InsufficientNativeBalanceError.
+				clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount).
+				setCauser(CauserSender)
 		}
 
 		prepareUTXOsResult, err = PrepareUTXOs(PrepareUTXOsParams{
@@ -1058,6 +1084,10 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
 		})
 		if err != nil {
+			if errIns := new(InsufficientError); errors.As(err, &errIns) {
+				return result, errIns.setCauser(CauserFeePayer)
+			}
+
 			return result, err
 		}
 
@@ -1207,7 +1237,7 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 	var fullParams = !(params.SatoshiPerKVByte == nil && params.Inputs == 0 && params.Outputs == 0)
 	for i := 1; i <= len(params.Utxos); i++ {
 		if fullParams {
-			// vB * ( sat / kvB ) = 1000 sat.
+			// INFO: vB * ( sat / kvB ) = 1000 sat.
 			result.RoughEstimate = new(big.Int).Mul(RoughTxSizeEstimate(i+params.Inputs, params.Outputs),
 				params.SatoshiPerKVByte)
 			result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
@@ -1219,7 +1249,7 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 				new(big.Int).Set(params.TransferAmount), i, InsufficientNativeBalanceError)
 		}
 		if err != nil {
-			if errors.As(err, new(*InsufficientError)) {
+			if errors.As(err, new(*InsufficientError)) && i != len(params.Utxos) {
 				continue
 			}
 
@@ -1229,7 +1259,13 @@ func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err err
 		return result, nil
 	}
 
-	return result, InsufficientNativeBalanceError
+	// INFO: vB * ( sat / kvB ) = 1000 sat.
+	result.RoughEstimate = new(big.Int).Mul(RoughTxSizeEstimate(1+params.Inputs, params.Outputs),
+		params.SatoshiPerKVByte)
+	result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
+	need := new(big.Int).Add(result.RoughEstimate, params.TransferAmount)
+
+	return result, InsufficientNativeBalanceError.clarify(need, big.NewInt(0))
 }
 
 // PrepareUTXOsParams defines parameters for PrepareUTXOs function.
@@ -1271,7 +1307,7 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 	for i := 1; i <= len(utxos); i++ {
 		usedUTXOs, totalAmount, err = SelectUTXO(utxos, runeFn, transferAmount, i, InsufficientRuneBalanceError)
 		if err != nil {
-			if errors.As(err, new(*InsufficientError)) {
+			if errors.As(err, new(*InsufficientError)) && i != len(utxos) {
 				continue
 			}
 
@@ -1281,7 +1317,7 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 		return usedUTXOs, totalAmount, nil
 	}
 
-	return nil, nil, InsufficientRuneBalanceError
+	return nil, nil, InsufficientRuneBalanceError.clarify(transferAmount, big.NewInt(0))
 }
 
 // RoughTxSizeEstimate returns Tx rough estimated size in vBytes.
