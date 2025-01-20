@@ -311,6 +311,100 @@ func TestTxBuilder(t *testing.T) {
 				require.Len(t, p.Outputs, test.outputs)
 			})
 		}
+
+		t.Run("test pointer usage", func(t *testing.T) {
+			t.Run("pointer affecting transfer", func(t *testing.T) {
+				// burn only with change.
+				result, err := txBuilder.BuildRunesTransferTx(txbuilder.BaseRunesTransferParams{
+					RuneID: runeID,
+					RunesSender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(546),
+								Script:  []byte("_bitcoin_transaction_rune_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+								Runes:   []bitcoin.RuneUTXO{{RuneID: runeID, Amount: big.NewInt(7726)}},
+							},
+						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+					},
+					FeePayer: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
+						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					BurnRuneAmount:        big.NewInt(3000),
+					SatoshiPerKVByte:      big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
+				})
+				require.NoError(t, err)
+
+				packet, err := psbt.NewFromRawBytes(bytes.NewReader(result.SerializedPSBT), false)
+				require.NoError(t, err)
+
+				runestone, err := runes.ParseRunestone(packet.UnsignedTx.TxOut[0].PkScript)
+				require.NoError(t, err)
+				require.NotNil(t, runestone.Pointer)
+				require.EqualValues(t, 1, *runestone.Pointer)
+			})
+
+			t.Run("pointer must have previous value", func(t *testing.T) {
+				// transfer runes with change.
+				result, err := txBuilder.BuildRunesTransferTx(txbuilder.BaseRunesTransferParams{
+					RuneID: runeID,
+					RunesSender: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   4,
+								Amount:  big.NewInt(546),
+								Script:  []byte("_bitcoin_transaction_rune_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+								Runes:   []bitcoin.RuneUTXO{{RuneID: runeID, Amount: big.NewInt(7726)}},
+							},
+						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "29fa611c361355b082ee593feb368009aa9c6bd1ed36c9983edcd113fb8da33f",
+					},
+					FeePayer: &txbuilder.PaymentData{
+						UTXOs: []bitcoin.UTXO{
+							{
+								TxHash:  "d78a52d61c43ec43d56e270e8f87ebe952f3bb5fe0a042494ed6ebf753285746",
+								Index:   2,
+								Amount:  big.NewInt(850000), // 0.0085 BTC.
+								Script:  []byte("_bitcoin_transaction_script_"),
+								Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+							},
+						},
+						Address: "tb1peymd09grxec8qg7tn5vqsmf7j7fhuvw9w8lua3msmzzqhr3qtfjqlj50zg",
+						PubKey:  "03d17661b814dfaf3f7d6e70e8d4c8f5e6fdbe780a2c0373dd06ca7d75dc19f8be",
+					},
+					TransferRuneAmount:    big.NewInt(3357),
+					SatoshiPerKVByte:      big.NewInt(5000), // 5 sat/vB.
+					RunesRecipientAddress: "tb1p9m40h0uj4uk37hsgvm97h4shhx2kyhehvfax8rysfhwjdp2ycvgqtxqsu0",
+				})
+				require.NoError(t, err)
+
+				packet, err := psbt.NewFromRawBytes(bytes.NewReader(result.SerializedPSBT), false)
+				require.NoError(t, err)
+
+				runestone, err := runes.ParseRunestone(packet.UnsignedTx.TxOut[0].PkScript)
+				require.NoError(t, err)
+				require.NotNil(t, runestone.Pointer)
+				require.EqualValues(t, 2, *runestone.Pointer)
+			})
+		})
 	})
 
 	t.Run("BuildBTCTransferTx", func(t *testing.T) {

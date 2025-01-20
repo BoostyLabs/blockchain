@@ -363,7 +363,8 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	if numbers.IsGreater(totalRuneAmount, totalAllocatingRuneAmount) {
 		outputs++
 		satTransferAmount.Add(satTransferAmount, nonDustBitcoinAmount)
-		runestone.Pointer = &returnOutput
+		returnOutputCopy := returnOutput
+		runestone.Pointer = &returnOutputCopy
 		if !isRunesTransferred {
 			*runestone.Pointer--
 		}
