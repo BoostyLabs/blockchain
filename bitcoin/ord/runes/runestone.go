@@ -235,22 +235,42 @@ func (runestone *Runestone) Serialize() ([]byte, error) {
 	flags := big.NewInt(0)
 	if runestone.Etching != nil {
 		flags = AddFlag(flags, FlagEtching)
-		message.Fields[TagDivisibility] = []*big.Int{big.NewInt(int64(*runestone.Etching.Divisibility))}
-		message.Fields[TagPremine] = []*big.Int{runestone.Etching.Premine}
-		message.Fields[TagRune] = []*big.Int{runestone.Etching.Rune.Value()}
+		if runestone.Etching.Divisibility != nil {
+			message.Fields[TagDivisibility] = []*big.Int{big.NewInt(int64(*runestone.Etching.Divisibility))}
+		}
+		if runestone.Etching.Premine != nil {
+			message.Fields[TagPremine] = []*big.Int{runestone.Etching.Premine}
+		}
+		if runestone.Etching.Rune != nil {
+			message.Fields[TagRune] = []*big.Int{runestone.Etching.Rune.Value()}
+		}
 		if runestone.Etching.Spacers != nil {
 			message.Fields[TagSpacers] = []*big.Int{big.NewInt(int64(*runestone.Etching.Spacers))}
 		}
-		message.Fields[TagSymbol] = []*big.Int{big.NewInt(int64(*runestone.Etching.Symbol))}
+		if runestone.Etching.Symbol != nil {
+			message.Fields[TagSymbol] = []*big.Int{big.NewInt(int64(*runestone.Etching.Symbol))}
+		}
 
 		if runestone.Etching.Terms != nil {
 			flags = AddFlag(flags, FlagTerms)
-			message.Fields[TagCap] = []*big.Int{runestone.Etching.Terms.Cap}
-			message.Fields[TagAmount] = []*big.Int{runestone.Etching.Terms.Amount}
-			message.Fields[TagHeightStart] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.HeightStart)}
-			message.Fields[TagHeightEnd] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.HeightEnd)}
-			message.Fields[TagOffsetStart] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.OffsetStart)}
-			message.Fields[TagOffsetEnd] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.OffsetEnd)}
+			if runestone.Etching.Terms.Cap != nil {
+				message.Fields[TagCap] = []*big.Int{runestone.Etching.Terms.Cap}
+			}
+			if runestone.Etching.Terms.Amount != nil {
+				message.Fields[TagAmount] = []*big.Int{runestone.Etching.Terms.Amount}
+			}
+			if runestone.Etching.Terms.HeightStart != nil {
+				message.Fields[TagHeightStart] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.HeightStart)}
+			}
+			if runestone.Etching.Terms.HeightEnd != nil {
+				message.Fields[TagHeightEnd] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.HeightEnd)}
+			}
+			if runestone.Etching.Terms.OffsetStart != nil {
+				message.Fields[TagOffsetStart] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.OffsetStart)}
+			}
+			if runestone.Etching.Terms.OffsetEnd != nil {
+				message.Fields[TagOffsetEnd] = []*big.Int{new(big.Int).SetUint64(*runestone.Etching.Terms.OffsetEnd)}
+			}
 		}
 
 		if runestone.Etching.Turbo {
