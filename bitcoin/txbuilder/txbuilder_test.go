@@ -24,7 +24,7 @@ import (
 )
 
 func TestTxBuilder(t *testing.T) {
-	txBuilder := txbuilder.NewTxBuilder(&chaincfg.TestNet3Params)
+	txBuilder := txbuilder.NewTxBuilder(&chaincfg.TestNet4Params)
 
 	t.Run("SelectUTXO", func(t *testing.T) {
 		utxos := []bitcoin.UTXO{ // sorted by btc utxos.

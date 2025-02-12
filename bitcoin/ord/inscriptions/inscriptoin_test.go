@@ -255,7 +255,7 @@ func TestInscription(t *testing.T) {
 		rune1, err := runes.NewRuneFromString("HELLO")
 		require.NoError(t, err)
 
-		chainParams := &chaincfg.TestNet3Params
+		chainParams := &chaincfg.TestNet4Params
 		tests := []struct {
 			publicKey   string
 			inscription *inscriptions.Inscription
