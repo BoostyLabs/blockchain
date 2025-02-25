@@ -5,6 +5,7 @@ package runes
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -217,13 +218,39 @@ func (runestone *Runestone) IntoScript() ([]byte, error) {
 		return nil, err
 	}
 
+	// OP_RETURN + OP_13 + OP_PUSH_<num> + payload.
+	return append([]byte{txscript.OP_RETURN, txscript.OP_13}, serializeDataPushes(payload)...), nil
+}
+
+// serializeDataPushes serialises runestone payload into data pushes.
+func serializeDataPushes(payload []byte) (dataPushes []byte) {
 	payloadSize := len(payload)
-	if payloadSize < txscript.OP_DATA_1 || payloadSize > txscript.OP_DATA_75 {
-		return nil, errors.New("payload is out of PUSH_DATA bounds")
+	if payloadSize <= txscript.OP_DATA_75 {
+		return append([]byte{byte(payloadSize)}, payload...)
 	}
 
-	// OP_RETURN + OP_13 + OP_PUSH_<num> + payload.
-	return append([]byte{txscript.OP_RETURN, txscript.OP_13, byte(payloadSize)}, payload...), nil
+	const defaultPushDataSize = 520
+	var (
+		idx              = 0
+		dataPushesNumber = payloadSize / defaultPushDataSize
+		pushSize         int
+	)
+	if payloadSize%defaultPushDataSize > 0 {
+		dataPushesNumber++
+	}
+
+	dataPushes = make([]byte, 0, payloadSize+dataPushesNumber*3) // INFO: Payload size + (OP_PUSHDATA2 + 2 bytes size) * data pushes number.
+
+	// INFO: Split into OP_PUSHDATA2 data pushes.
+	for idx < payloadSize {
+		dataPushes = append(dataPushes, txscript.OP_PUSHDATA2)
+		pushSize = min(defaultPushDataSize, payloadSize-idx)
+		dataPushes = binary.LittleEndian.AppendUint16(dataPushes, uint16(pushSize))
+		dataPushes = append(dataPushes, payload[idx:idx+pushSize]...)
+		idx += pushSize
+	}
+
+	return dataPushes
 }
 
 // Serialize returns Runestone as bytes array.
@@ -453,17 +480,12 @@ func PreparePayload(rawPayload []byte) ([]byte, error) {
 	payload := make([]byte, 0, len(rawPayload)-3)
 	buffer := bytes.NewReader(rawPayload[2:])
 	for buffer.Len() > 0 {
-		op, err := buffer.ReadByte()
+		pushDataVal, err := buffer.ReadByte()
 		if err != nil {
 			return nil, err
 		}
 
-		if op < txscript.OP_DATA_1 || op > txscript.OP_DATA_75 {
-			return nil, errors.New("missing OP_DATA_<num>")
-		}
-
-		data := make([]byte, op)
-		_, err = buffer.Read(data)
+		data, err := parseDataPush(buffer, int(pushDataVal))
 		if err != nil {
 			return nil, err
 		}
@@ -471,12 +493,42 @@ func PreparePayload(rawPayload []byte) ([]byte, error) {
 		payload = append(payload, data...)
 	}
 
-	// TODO: figure out where it must be.
-	// if len(payload) > 18 {
-	// 	return nil, ErrOverflow
-	// }.
-
 	return payload, nil
+}
+
+// parseDataPush parses data payload from buffer depending on push data byte value.
+func parseDataPush(buffer *bytes.Reader, pushDataVal int) (data []byte, _ error) {
+	var size int
+	switch {
+	case pushDataVal >= txscript.OP_DATA_1 && pushDataVal <= txscript.OP_DATA_75:
+		size = pushDataVal
+	case pushDataVal >= txscript.OP_PUSHDATA1 && pushDataVal <= txscript.OP_PUSHDATA4:
+		bytesLen := 0x0001 << (pushDataVal - txscript.OP_PUSHDATA1) // INFO: 2 ^ {76 or 77 or 78} - 76 == 1 or 2 or 4.
+		sizeBuf := make([]byte, bytesLen)
+		_, err := buffer.Read(sizeBuf)
+		if err != nil {
+			return nil, err
+		}
+
+		// INFO: LittleEndian ordering.
+		for ; bytesLen > 0; bytesLen-- {
+			size <<= 8                       // INFO: Prepare place for the next byte.
+			size |= int(sizeBuf[bytesLen-1]) // INFO: Push the next byte.
+		}
+	default:
+		return nil, fmt.Errorf("invalid OP_PUSHDATA (0x%x)", pushDataVal)
+	}
+
+	data = make([]byte, size)
+	read, err := buffer.Read(data)
+	if err != nil {
+		return nil, err
+	}
+	if read != size {
+		return nil, fmt.Errorf("read %d of %d", read, size)
+	}
+
+	return data, nil
 }
 
 // IsPossibleRunestone returns true if the script starts with rune protocol bytes sequence.
@@ -488,7 +540,7 @@ func IsPossibleRunestone(script []byte) bool {
 		return false
 	case script[1] != txscript.OP_13:
 		return false
-	case script[2] < txscript.OP_DATA_1 || script[2] > txscript.OP_DATA_75:
+	case script[2] < txscript.OP_DATA_1 || script[2] > txscript.OP_PUSHDATA4:
 		return false
 	}
 
