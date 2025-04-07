@@ -21,6 +21,7 @@ import (
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/signer"
+	"github.com/BoostyLabs/blockchain/bitcoin/utils"
 )
 
 func TestSigner(t *testing.T) {
@@ -133,6 +134,129 @@ func TestSigner(t *testing.T) {
 	})
 }
 
+func TestSignerMulti(t *testing.T) {
+	chainParams := &chaincfg.MainNetParams
+	s := signer.NewSigner(chainParams)
+
+	var (
+		masterPrivateKey,
+		tapScriptPrivateKey1, tapScriptPrivateKey2,
+		tapScriptPrivateKey3, tapScriptPrivateKey4,
+		invalidPrivateKey1, invalidPrivateKey2 *btcec.PrivateKey
+		err error
+	)
+	for _, privateKeyP := range []**btcec.PrivateKey{
+		&masterPrivateKey, &tapScriptPrivateKey1, &tapScriptPrivateKey2,
+		&tapScriptPrivateKey3, &tapScriptPrivateKey4, &invalidPrivateKey1, &invalidPrivateKey2,
+	} {
+		*privateKeyP, err = btcec.NewPrivateKey()
+		require.NoError(t, err)
+	}
+
+	// INFO: Build MultiSig 4 of 4.
+	leafTapScript, err := utils.NewTaprootMultiSigLeafTapScript(tapScriptPrivateKey1, tapScriptPrivateKey2,
+		tapScriptPrivateKey3, tapScriptPrivateKey4)
+	require.NoErrorf(t, err, "leaf tapScript building")
+
+	leafTapScriptUnspendable, err := utils.NewUnspendableScript([]byte("really_unspendable_!")...)
+	require.NoErrorf(t, err, "leaf tapScript unspendable building")
+
+	// INFO: Generate Taproot address.
+	taprootAddress, err := utils.NewTaprootAddressFromScripts(chainParams, masterPrivateKey, leafTapScript, leafTapScriptUnspendable)
+	require.NoErrorf(t, err, "taproot address generation")
+
+	// INFO: Generate TapScript tree.
+	tapScriptTree, err := utils.NewTapScriptTreeFromRawScripts(leafTapScript, leafTapScriptUnspendable)
+	require.NoErrorf(t, err, "tapScript tree generation")
+
+	invalidTapScriptTree, err := utils.NewTapScriptTreeFromRawScripts(leafTapScript)
+	require.NoErrorf(t, err, "tapScript tree invalid generation")
+
+	masterPublicKeyXOnly := masterPrivateKey.PubKey().SerializeCompressed()[1:]
+
+	tests := []struct {
+		name                 string
+		masterPrivateKey     *btcec.PrivateKey
+		tapScriptPrivateKeys []*btcec.PrivateKey
+		tapScriptTree        *txscript.IndexedTapScriptTree
+		err                  error
+	}{
+		{
+			name:                 "valid 4 of 4 signature",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        tapScriptTree,
+		},
+		{
+			name:                 "not enough signatures (3 of 4 private keys for leaf signatures)",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrInvalidStackOperation, Description: "index 0 is invalid for stack size 0"},
+		},
+		{
+			name:                 "private keys invalid order",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey1, tapScriptPrivateKey2, tapScriptPrivateKey3, tapScriptPrivateKey4},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrNullFail, Description: "signature not empty on failed checksig"},
+		},
+		{
+			name:                 "invalid leaf keys",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{invalidPrivateKey1, tapScriptPrivateKey3, tapScriptPrivateKey2, invalidPrivateKey2},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrNullFail, Description: "signature not empty on failed checksig"},
+		},
+		{
+			name:                 "unable to unlock by script spend path without correct script tree",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			err:                  txscript.Error{ErrorCode: txscript.ErrTaprootMerkleProofInvalid},
+		},
+		{
+			name:                 "unable to unlock by script spend path with incorrect script tree",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        invalidTapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrTaprootMerkleProofInvalid},
+		},
+		{
+			name:             "unlock with key spend path",
+			masterPrivateKey: masterPrivateKey,
+			tapScriptTree:    tapScriptTree,
+		},
+		{
+			name:             "unlock with key spend path invalid private key",
+			masterPrivateKey: invalidPrivateKey1,
+			tapScriptTree:    tapScriptTree,
+			err:              txscript.Error{ErrorCode: txscript.ErrTaprootSigInvalid},
+		},
+		{
+			name:             "unable to unlock by key spend path without correct script tree",
+			masterPrivateKey: invalidPrivateKey1,
+			err:              txscript.Error{ErrorCode: txscript.ErrTaprootSigInvalid},
+		},
+		{
+			name:             "unable to unlock by key spend path with incorrect script tree",
+			masterPrivateKey: invalidPrivateKey1,
+			tapScriptTree:    invalidTapScriptTree,
+			err:              txscript.Error{ErrorCode: txscript.ErrTaprootSigInvalid},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			packetBytes := prepareTxPacketBytes(t, taprootAddress, masterPublicKeyXOnly, leafTapScript, test.tapScriptTree)
+
+			var signedPSBTBytes []byte
+			signedPSBTBytes, err = s.SignTaprootMulti(signer.SignTaprootMultiParams{
+				SerializedPSBT:       packetBytes,
+				Inputs:               []int{0},
+				MasterPrivateKey:     test.masterPrivateKey,
+				TapScriptPrivateKeys: test.tapScriptPrivateKeys,
+			})
+			require.NoError(t, err)
+
+			err = prepareMultiSigEngine(t, signedPSBTBytes).Execute()
+			require.ErrorIs(t, err, test.err)
+		})
+	}
+}
+
 func mustHex(s string) []byte {
 	b, _ := hex.DecodeString(s)
 
@@ -150,4 +274,52 @@ func copyBytes(b []byte) []byte {
 	copy(c, b)
 
 	return c
+}
+
+func prepareTxPacketBytes(t *testing.T, taprootAddress *btcutil.AddressTaproot, masterPubKeyXOlny,
+	leafTapScript []byte, tapScriptTree *txscript.IndexedTapScriptTree) []byte {
+	tx := wire.NewMsgTx(2)
+	tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(mustHash("5aa4e4e957b467d07413aa75cdab5e4ce9ff2b714cd81b6af0e90bfee5ff070c"), 0), nil, nil))
+	tx.AddTxOut(wire.NewTxOut(43000, mustHex("512015ae9a1bdfb273684b8c1107cc2dccf51f2235d8c79fe8b8e6555ad826415011")))
+
+	taprootAddressScript, err := txscript.PayToAddrScript(taprootAddress)
+	require.NoError(t, err)
+
+	packet, err := psbt.NewFromUnsignedTx(tx)
+	require.NoError(t, err)
+
+	packet.Inputs[0].WitnessUtxo = wire.NewTxOut(43000, taprootAddressScript)
+	packet.Inputs[0].SighashType = txscript.SigHashAll
+	packet.Inputs[0].TaprootInternalKey = masterPubKeyXOlny
+	packet.Inputs[0].WitnessScript = leafTapScript
+
+	if tapScriptTree != nil {
+		require.NoError(t, utils.UpdatePSBTInputWithTapScriptLeafData(&packet.Inputs[0], tapScriptTree))
+	}
+
+	packetBytes := bytes.NewBuffer(nil)
+	err = packet.Serialize(packetBytes)
+	require.NoError(t, err)
+
+	return packetBytes.Bytes()
+}
+
+func prepareMultiSigEngine(t *testing.T, signedPSBTBytes []byte) *txscript.Engine {
+	signedPSBT, err := psbt.NewFromRawBytes(bytes.NewReader(signedPSBTBytes), false)
+	require.NoError(t, err)
+	require.NoError(t, psbt.Finalize(signedPSBT, 0))
+
+	signedTx, err := psbt.Extract(signedPSBT)
+	require.NoError(t, err)
+
+	prevFetcher := txscript.NewCannedPrevOutputFetcher(copyBytes(signedPSBT.Inputs[0].WitnessUtxo.PkScript), signedPSBT.Inputs[0].WitnessUtxo.Value)
+	sigHashes := txscript.NewTxSigHashes(signedTx, prevFetcher)
+
+	vm, err := txscript.NewEngine(
+		signedPSBT.Inputs[0].WitnessUtxo.PkScript, signedTx, 0, txscript.StandardVerifyFlags,
+		nil, sigHashes, 43000, prevFetcher,
+	)
+	require.NoError(t, err)
+
+	return vm
 }

@@ -1,5 +1,5 @@
 run:
-  timeout: 1m
+  deadline: 10m
   issues-exit-code: 1
   tests: true
 
@@ -11,7 +11,7 @@ linters:
     - durationcheck           # verifies whether durations are multiplied, usually a mistake
     - errcheck                # find unchecked errors
 #    - errorlint               # finds misuses of errors
-    - exportloopref           # check for exported loop vars
+    - copyloopvar             # check for exported loop vars
     - gocritic                # checks for style, performance issues, and common programming errors
     - godot                   # dots for everything
     - err113                  # check error expressions
@@ -26,7 +26,7 @@ linters:
     - nilerr                  # checks for misuses of `if err != nil { return nil }`
     - noctx                   # finds locations that should use context
     - revive                  # check standard linting rules
-    - tenv                    # ensure we use t.SetEnv instead of os.SetEnv
+    - usetesting              # ensure we use t.SetEnv instead of os.SetEnv
     - unconvert               # remove unnecessary conversions
     - wastedassign
   disable:
@@ -36,14 +36,12 @@ linters:
     - containedctx     # gives false positives, however might be good to re-evaluate
     - contextcheck     # doesn't look like it's useful
     - cyclop           # this complexity is not a good metric
-    - deadcode         # deprecated and part of staticcheck
     - decorder         # not that useful
     - depguard         # unused
     - dupl             # slow
     - errchkjson       # false positives, checks for non-encodable json types
     - errname          # we have different approach
     - exhaustive       # doesn't handle default case
-    - exhaustivestruct # false positivies
     - forbidigo        # not useful
     - funlen           # no limit on func length
     - gci              # we have custom import checking
@@ -53,14 +51,11 @@ linters:
     - godox            # too many false positivies
     - goheader         # separate tool
     - goimports        # disabled, because it's slow, using scripts/check-imports.go instead.
-    - gomnd            # false positives
     - gomoddirectives  # not useful
     - gomodguard       # not useful
     - gosec            # needs tweaking
     - gosimple         # part of staticcheck
     - grouper          # we have a custom implementation
-    - ifshort          # usefulness, depends on the context
-    - interfacer       # not that useful
     - ireturn          # not that useful for us
     - lll              # don't need this check
     - maintidx         # code complexity based on halsted V and cyclomatic, both shown to be ineffective
@@ -70,14 +65,12 @@ linters:
     - promlinter       # not relevant
     - rowserrcheck     # checks if sql.Rows.Err is checked correctly - Disabled  because it reports false positive with defer statements after Query call
     - sqlclosecheck    # we have tagsql, which checks this better
-    - structcheck      # deprecated and part of staticcheck
     - stylecheck       # has false positives
     - tagliatelle      # not our style
     - testpackage      # sometimes it's useful to have tests on private funcs
     - thelper          # too many false positives
     - tparallel        # false positivies
     - unused           # part of staticcheck
-    - varcheck         # deprecated and part of staticcheck
     - varnamelen       # unenecssary
     - wrapcheck        # too much noise and false positives
     - wsl              # too much noise
@@ -118,7 +111,7 @@ linters-settings:
     disabled-checks:
       - ifElseChain
   goimports:
-    local-prefixes: "blockchain"
+    local-prefixes: "tricorn"
   golint:
     min-confidence: 0.8
   gofmt:
