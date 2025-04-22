@@ -39,20 +39,15 @@ const (
 )
 
 var (
-	// headerSizeVBytes defined rough tx header size in vBytes.
-	headerSizeVBytes = big.NewInt(11)
-	// inputSizeVBytes defined rough tx input size in vBytes.
-	inputSizeVBytes = big.NewInt(90)
-	// outputSizeVBytes defined rough tx output size in vBytes.
-	outputSizeVBytes = big.NewInt(30)
-
 	// inscriptionInputSizeVBytes defined rough tx input size in vBytes
 	// with signature, but without witness script data size.
 	inscriptionInputSizeVBytes = big.NewInt(61)
 
 	// nonDustBitcoinAmount defined the smallest needed amount in satoshi to link to rune output.
 	nonDustBitcoinAmount = big.NewInt(546)
+)
 
+const (
 	// recipientOutput defines runes output for recipient (transferring) by base rune tx.
 	recipientOutput uint32 = 1
 	// returnOutput defines runes output for sender (change) by base rune tx.
@@ -106,6 +101,27 @@ type PaymentData struct {
 	UTXOs   []bitcoin.UTXO // must be sorted by target token amount desc.
 	Address string         // payer address.
 	PubKey  string         // payer public key.
+
+	// FeesData holds data used to more accurately estimate the fee.
+	// Default values from NewDefaultPaymentDataFees will be used
+	// in case of not fully filled data or nil.
+	FeesData *PaymentDataFees // optional.
+}
+
+// PrepareFeesData performs initialization for FeesData is needed.
+func (pd *PaymentData) PrepareFeesData(networkParams *chaincfg.Params) error {
+	if !pd.FeesData.Filled() {
+		address, err := btcutil.DecodeAddress(pd.Address, networkParams)
+		if err != nil {
+			return err
+		}
+
+		pd.FeesData, err = NewDefaultPaymentDataFees(address)
+
+		return err
+	}
+
+	return nil
 }
 
 // BaseBTCTransferParams describes basic data needed to build btc transfer transaction.
@@ -156,6 +172,12 @@ type BaseInscriptionTxParams struct {
 	Inscription               *inscriptions.Inscription // inscription data to commit.
 	InscriptionBasePubKey     string                    // public key needed to create inscription address.
 	PremineSplittingFactor    uint                      // for more details see [BaseRuneEtchTxParams.PremineSplittingFactor].
+
+	// RunesRecipientAddress hold recipient address to receive etched runes on the reveal-etch tx.
+	// optional.
+	// used for more accurate fee estimation.
+	// if empty, sender fee payment data will be used for reveal-etch transaction estimation.
+	RunesRecipientAddress string
 }
 
 // BaseInscriptionTxResult describes result of buildBaseInscriptionTx method.
@@ -253,6 +275,13 @@ func NewTxBuilder(networkParams *chaincfg.Params) *TxBuilder {
 // PSBT transaction with used rune and base outputs, estimated fee in satoshi,
 // and error if any.
 func (b *TxBuilder) BuildRunesTransferTx(params BaseRunesTransferParams) (result BuildRunesTransferTxResult, _ error) {
+	if err := params.RunesSender.PrepareFeesData(b.networkParams); err != nil {
+		return result, err
+	}
+	if err := params.FeePayer.PrepareFeesData(b.networkParams); err != nil {
+		return result, err
+	}
+
 	buildBaseTransferRuneTxResult, err := b.buildBaseTransferRuneTx(params)
 	if err != nil {
 		return result, err
@@ -334,15 +363,14 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 		return result, err
 	}
 
-	outputs := 2
 	satTransferAmount := big.NewInt(0)
 	runestone := &runes.Runestone{}
 	isRunesTransferred := false
+	runesSenderOutputs := 0
 
 	// runes transfer output + edict.
 	if numbers.IsPositive(params.TransferRuneAmount) {
 		isRunesTransferred = true
-		outputs++
 		satTransferAmount.Add(satTransferAmount, nonDustBitcoinAmount)
 
 		runestone.Edicts = append(runestone.Edicts, runes.Edict{
@@ -361,7 +389,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// runes return output.
 	if numbers.IsGreater(totalRuneAmount, totalAllocatingRuneAmount) {
-		outputs++
+		runesSenderOutputs++
 		satTransferAmount.Add(satTransferAmount, nonDustBitcoinAmount)
 		returnOutputCopy := returnOutput
 		runestone.Pointer = &returnOutputCopy
@@ -370,29 +398,51 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 		}
 	}
 
-	// commission output.
-	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		outputs++
-		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
+	runestoneData, err := runestone.IntoScript()
+	if err != nil {
+		return result, err
 	}
 
-	prepareUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-		Utxos:            params.FeePayer.UTXOs,
-		Inputs:           len(runeUTXOs),
-		Outputs:          outputs,
+	txSizeEstimation := &RoughTxSize{
+		Elements: []*EstimationElement{{ // INFO: Runes containing inputs/outputs.
+			PaymentDataFees: params.RunesSender.FeesData,
+			InputsNumber:    len(runeUTXOs),
+			OutputsNumber:   runesSenderOutputs,
+		}},
+		ExtraExpenses: big.NewInt(int64(len(runestoneData))), // INFO: Runestone output size.
+	}
+
+	// commission output.
+	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
+		commissionAddress, err := btcutil.DecodeAddress(params.CommissionRecipientAddress, b.networkParams)
+		if err != nil {
+			return result, err
+		}
+
+		commissionAddressDataFees, err := NewDefaultPaymentDataFees(commissionAddress)
+		if err != nil {
+			return result, err
+		}
+
+		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, &EstimationElement{ // INFO: Commission extra output.
+			PaymentDataFees: commissionAddressDataFees,
+			OutputsNumber:   1,
+		})
+	}
+
+	prepareUTXOsResult, err := (&PrepareUTXOsParams{
+		PaymentData:      params.FeePayer,
+		ExtraExpenses:    txSizeEstimation.Estimate(),
+		Outputs:          1, // INFO: Change extra output.
 		TransferAmount:   satTransferAmount,
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
-	})
+	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
 			return result, errIns.setCauser(CauserFeePayer)
 		}
 
-		return result, err
-	}
-
-	runestoneData, err := runestone.IntoScript()
-	if err != nil {
 		return result, err
 	}
 
@@ -513,6 +563,15 @@ func (b *TxBuilder) buildRunesTransferPSBT(params BuildRunesTransferPSBTParams) 
 // format with inputs indexes assigned in unknown fields. Returns serialized
 // PSBT transaction with used base outputs, estimated fee in satoshi, and error if any.
 func (b *TxBuilder) BuildBTCTransferTx(params BaseBTCTransferParams) (result BuildBTCTransferTxResult, _ error) {
+	if err := params.Sender.PrepareFeesData(b.networkParams); err != nil {
+		return result, err
+	}
+	if params.FeePayer != nil {
+		if err := params.FeePayer.PrepareFeesData(b.networkParams); err != nil {
+			return result, err
+		}
+	}
+
 	buildBaseTransferRuneTxResult, err := b.buildBaseTransferBTCTx(params)
 	if err != nil {
 		return result, err
@@ -589,7 +648,6 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	}
 
 	var (
-		outputs           = 2 // btc transfer + sender btc change.
 		satTransferAmount = new(big.Int).Set(params.TransferSatoshiAmount)
 		differentFeePayer = params.FeePayer != nil
 		senderUsedUTXOs   []*bitcoin.UTXO
@@ -598,18 +656,34 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		bitcoinAmount     *big.Int
 		senderChange      *big.Int
 		feePayerChange    *big.Int
+		txSizeEstimation  = &RoughTxSize{Elements: make([]*EstimationElement, 0, 3)}
 	)
+
+	recipientEstimationElement, err := NewEstimationElementFromStringAddress(params.RecipientAddress, 0, 1, b.networkParams)
+	if err != nil {
+		return result, err
+	}
+	// INFO: Recipient output.
+	txSizeEstimation.Elements = append(txSizeEstimation.Elements, recipientEstimationElement)
+
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		outputs++ // internal commission.
+		commissionEstimationElement, err := NewEstimationElementFromStringAddress(
+			params.CommissionReceiverAddress, 0, 1, b.networkParams)
+		if err != nil {
+			return result, err
+		}
+
+		// INFO: Commission extra output.
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, commissionEstimationElement)
+
 		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
 	}
 
 	if differentFeePayer {
-		outputs++ // fee payer btc change.
-		senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-			Utxos:          params.Sender.UTXOs,
+		senderUTXOsResult, err := (&PrepareUTXOsParams{
+			PaymentData:    params.Sender,
 			TransferAmount: satTransferAmount,
-		})
+		}).PrepareTransferOnly()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
 				return result, errIns.setCauser(CauserSender)
@@ -618,13 +692,25 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 			return result, err
 		}
 
-		feePayerUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-			Utxos:            params.FeePayer.UTXOs,
-			Inputs:           len(senderUTXOsResult.UsedUTXOs),
-			Outputs:          outputs,
+		senderTxSizeEstimation := &EstimationElement{ // INFO: Change inputs.
+			PaymentDataFees: params.Sender.FeesData,
+			InputsNumber:    len(senderUTXOsResult.UsedUTXOs),
+		}
+
+		senderChange = new(big.Int).Sub(senderUTXOsResult.TotalAmount, satTransferAmount)
+		if !numbers.IsLess(senderChange, nonDustBitcoinAmount) {
+			senderTxSizeEstimation.OutputsNumber = 1
+		}
+
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, senderTxSizeEstimation)
+
+		feePayerUTXOsResult, err := (&PrepareUTXOsParams{
+			PaymentData:      params.FeePayer,
+			ExtraExpenses:    txSizeEstimation.Estimate(),
+			Outputs:          1,             // INFO: FeePayer change output.
 			TransferAmount:   big.NewInt(0), // calculate tx fee only.
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
-		})
+		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
 				return result, errIns.setCauser(CauserFeePayer)
@@ -637,16 +723,15 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		feePayerUsedUTXOs = feePayerUTXOsResult.UsedUTXOs
 		bitcoinAmount = new(big.Int).Add(senderUTXOsResult.TotalAmount, feePayerUTXOsResult.TotalAmount)
 		fee = feePayerUTXOsResult.RoughEstimate
-		senderChange = new(big.Int).Sub(senderUTXOsResult.TotalAmount, satTransferAmount)
 		feePayerChange = new(big.Int).Sub(feePayerUTXOsResult.TotalAmount, fee)
 	} else {
-		senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-			Utxos:            params.Sender.UTXOs,
-			Inputs:           0,
-			Outputs:          outputs,
+		senderUTXOsResult, err := (&PrepareUTXOsParams{
+			PaymentData:      params.Sender,
+			ExtraExpenses:    txSizeEstimation.Estimate(),
+			Outputs:          1, // INFO: FeePayer change output.
 			TransferAmount:   satTransferAmount,
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
-		})
+		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
 				return result, errIns.setCauser(CauserSender)
@@ -684,7 +769,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	bitcoinAmount.Sub(bitcoinAmount, fee)
 
 	// recipient btc output (#0).
-	err := b.addOutput(tx, params.TransferSatoshiAmount, bitcoinAmount, params.RecipientAddress)
+	err = b.addOutput(tx, params.TransferSatoshiAmount, bitcoinAmount, params.RecipientAddress)
 	if err != nil {
 		return result, err
 	}
@@ -698,7 +783,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	}
 
 	// sender's change btc output (#2).
-	if numbers.IsGreater(senderChange, nonDustBitcoinAmount) {
+	if !numbers.IsLess(senderChange, nonDustBitcoinAmount) {
 		err = b.addOutput(tx, senderChange, bitcoinAmount, params.Sender.Address)
 		if err != nil {
 			return result, err
@@ -706,7 +791,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	}
 
 	// fee payer's change btc output (#3).
-	if differentFeePayer && numbers.IsGreater(feePayerChange, nonDustBitcoinAmount) {
+	if differentFeePayer && !numbers.IsLess(feePayerChange, nonDustBitcoinAmount) {
 		err = b.addOutput(tx, feePayerChange, bitcoinAmount, params.FeePayer.Address)
 		if err != nil {
 			return result, err
@@ -782,6 +867,10 @@ func (b *TxBuilder) buildBTCTransferPSBT(params BuildBTCTransferPSBTParams) ([]b
 // transaction fee for inscription reveal - etching transaction. Returns serialized
 // PSBT transaction with used base outputs, estimated fee in satoshi, and error if any.
 func (b *TxBuilder) BuildInscriptionTx(params BaseInscriptionTxParams) (result BuildInscriptionTxPSBTResult, _ error) {
+	if err := params.Sender.PrepareFeesData(b.networkParams); err != nil {
+		return result, err
+	}
+
 	buildBaseInscriptionTxResult, err := b.buildBaseInscriptionTx(params)
 	if err != nil {
 		return result, err
@@ -845,16 +934,12 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}
 
 	var (
-		outputs                = 2 // inscription commitment + sender btc change.
 		satTransferAmount      = big.NewInt(0)
 		inscriptionAddress     string
 		inscriptionWitnessSize int
 		depositAmount          = big.NewInt(0)
+		txSizeEstimation       = &RoughTxSize{Elements: make([]*EstimationElement, 0, 3)}
 	)
-	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		outputs++ // internal commission.
-		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
-	}
 
 	inscriptionAddress, err = params.Inscription.IntoAddress(params.InscriptionBasePubKey, b.networkParams)
 	if err != nil {
@@ -866,20 +951,65 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 		return result, err
 	}
 
-	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)),
-		params.SatoshiPerKVByte, int(params.PremineSplittingFactor))
-	depositAmount.Add(depositAmount, etchTransactionFee)
+	inscriptionAddressEstimationElement, err := NewEstimationElementFromStringAddress(inscriptionAddress, 0, 1, b.networkParams)
+	if err != nil {
+		return result, err
+	}
+
+	inscriptionAddressEstimationElement.WitnessSizeVBytes.SetInt64(int64(inscriptionWitnessSize))
+	inscriptionAddressEstimationElement.WitnessSizeVBytes.Add(
+		inscriptionAddressEstimationElement.WitnessSizeVBytes, big.NewInt(103)) // INFO: Signature + Script reveal + Control block.
+
+	// INFO: Inscription output.
+	txSizeEstimation.Elements = append(txSizeEstimation.Elements, inscriptionAddressEstimationElement)
+
+	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
+		commissionEstimationElement, err := NewEstimationElementFromStringAddress(
+			params.CommissionReceiverAddress, 0, 1, b.networkParams)
+		if err != nil {
+			return result, err
+		}
+
+		// INFO: Commission extra output.
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, commissionEstimationElement)
+
+		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
+	}
+
+	etchTransactionFeeEstimation := &RoughTxSize{
+		IncludeHeader: true,
+		Elements: []*EstimationElement{{
+			PaymentDataFees: inscriptionAddressEstimationElement.PaymentDataFees,
+			InputsNumber:    1,
+		}},
+		ExtraExpenses: big.NewInt(89), // INFO: Max Runestone output size.
+	}
+	if params.RunesRecipientAddress != "" {
+		runesRecipientEstimationElement, err := NewEstimationElementFromStringAddress(
+			params.RunesRecipientAddress, 0, int(params.PremineSplittingFactor), b.networkParams)
+		if err != nil {
+			return result, err
+		}
+
+		etchTransactionFeeEstimation.Elements = append(etchTransactionFeeEstimation.Elements, runesRecipientEstimationElement)
+	} else {
+		etchTransactionFeeEstimation.Elements = append(etchTransactionFeeEstimation.Elements, &EstimationElement{
+			PaymentDataFees: params.Sender.FeesData,
+			OutputsNumber:   int(params.PremineSplittingFactor),
+		})
+	}
+
 	depositAmount.Add(depositAmount, new(big.Int).Mul(nonDustBitcoinAmount,
-		big.NewInt(int64(params.PremineSplittingFactor)))) // INFO: add runes recipient output.
+		big.NewInt(int64(params.PremineSplittingFactor)))) // INFO: add runes recipient outputs.
 
 	satTransferAmount.Add(satTransferAmount, depositAmount)
-	senderUTXOsResult, err := PrepareUTXOs(PrepareUTXOsParams{
-		Utxos:            params.Sender.UTXOs,
-		Inputs:           0,
-		Outputs:          outputs,
+	senderUTXOsResult, err := (&PrepareUTXOsParams{
+		PaymentData:      params.Sender,
+		ExtraExpenses:    new(big.Int).Add(txSizeEstimation.Estimate(), etchTransactionFeeEstimation.Estimate()),
+		Outputs:          1, // INFO: Change output.
 		TransferAmount:   satTransferAmount,
 		SatoshiPerKVByte: params.SatoshiPerKVByte,
-	})
+	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
 			return result, errIns.setCauser(CauserSender)
@@ -970,6 +1100,19 @@ func (b *TxBuilder) buildInscriptionTxPSBT(params BuildInscriptionTxPSBTParams) 
 // payment data will be used to cover transaction fee. Returns serialized
 // PSBT transaction with used base outputs, estimated fee in satoshi, and error if any.
 func (b *TxBuilder) BuildRuneEtchTx(params BaseRuneEtchTxParams) (result BuildRuneEtchTxPSBTResult, _ error) {
+	if !params.InscriptionReveal.FeesData.Filled() {
+		if err := params.InscriptionReveal.PrepareFeesData(b.networkParams); err != nil {
+			return result, err
+		}
+
+		params.InscriptionReveal.FeesData.WitnessSizeVBytes.Set(inscriptionInputSizeVBytes)
+	}
+	if params.AdditionalPayments != nil {
+		if err := params.AdditionalPayments.PrepareFeesData(b.networkParams); err != nil {
+			return result, err
+		}
+	}
+
 	buildBaseTransferRuneTxResult, err := b.buildRuneEtchTx(params)
 	if err != nil {
 		return result, err
@@ -1048,11 +1191,10 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	}
 
 	var (
-		pointerValue           uint32 = 1
-		inscriptionWitnessSize int
-		prepareUTXOsResult     PrepareUTXOsResult
-		runeOutputs            = 1
-		totalOutputs           = 1
+		pointerValue       uint32 = 1
+		prepareUTXOsResult PrepareUTXOsResult
+		runeOutputs        = 1
+		totalOutputs       = 1
 	)
 
 	if params.Rune.Premine != nil && numbers.IsPositive(params.Rune.Premine) && params.PremineSplittingFactor > 1 {
@@ -1063,12 +1205,48 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 
 	bitcoinAmount := new(big.Int).Set(params.InscriptionReveal.UTXOs[0].Amount)
 
-	inscriptionWitnessSize, err = params.Inscription.VBytesSize()
+	runestone := &runes.Runestone{
+		Etching: params.Rune,
+		Pointer: &pointerValue,
+	}
+	if runeOutputs > 1 {
+		runestone.Pointer = nil
+		quo, rem := new(big.Int).QuoRem(params.Rune.Premine, big.NewInt(int64(runeOutputs)), new(big.Int))
+		if !numbers.IsZero(rem) {
+			runestone.Edicts = append(runestone.Edicts, runes.Edict{
+				RuneID: runes.RuneID{},
+				Amount: rem,
+				Output: 1,
+			})
+		}
+		runestone.Edicts = append(runestone.Edicts, runes.Edict{
+			RuneID: runes.RuneID{},
+			Amount: quo,
+			Output: uint32(totalOutputs),
+		})
+	}
+
+	runestoneData, err := runestone.IntoScript()
 	if err != nil {
 		return result, err
 	}
 
-	etchTransactionFee := RoughEtchFeeEstimate(big.NewInt(int64(inscriptionWitnessSize)), params.SatoshiPerKVByte, runeOutputs)
+	runesRecipientEstimationElement, err := NewEstimationElementFromStringAddress(
+		params.RunesRecipientAddress, 0, int(params.PremineSplittingFactor), b.networkParams)
+	if err != nil {
+		return result, err
+	}
+
+	etchTransactionFeeEstimation := &RoughTxSize{
+		IncludeHeader: true,
+		Elements: []*EstimationElement{{
+			PaymentDataFees: params.InscriptionReveal.FeesData,
+			InputsNumber:    1,
+		}, runesRecipientEstimationElement},
+		ExtraExpenses: big.NewInt(int64(len(runestoneData))), // INFO: Runestone preestimated size.
+	}
+
+	etchTransactionFee := CalculateTxFee(etchTransactionFeeEstimation.Estimate(), params.SatoshiPerKVByte)
 	transferAmount := new(big.Int).Add(etchTransactionFee, new(big.Int).Mul(nonDustBitcoinAmount, big.NewInt(int64(runeOutputs))))
 	if numbers.IsGreater(transferAmount, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
@@ -1077,13 +1255,12 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 				setCauser(CauserSender)
 		}
 
-		prepareUTXOsResult, err = PrepareUTXOs(PrepareUTXOsParams{
-			Utxos:            params.AdditionalPayments.UTXOs,
-			Inputs:           1,
-			Outputs:          0,
+		prepareUTXOsResult, err = (&PrepareUTXOsParams{
+			PaymentData:      params.AdditionalPayments,
+			Outputs:          1, // INFO: Change output.
 			TransferAmount:   new(big.Int).Sub(transferAmount, params.InscriptionReveal.UTXOs[0].Amount),
 			SatoshiPerKVByte: params.SatoshiPerKVByte,
-		})
+		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
 				return result, errIns.setCauser(CauserFeePayer)
@@ -1127,30 +1304,13 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		totalOutputs++
 	}
 
-	runestone := &runes.Runestone{
-		Etching: params.Rune,
-		Pointer: &pointerValue,
-	}
+	// INFO: Fix output index.
 	if runeOutputs > 1 {
-		runestone.Pointer = nil
-		quo, rem := new(big.Int).QuoRem(params.Rune.Premine, big.NewInt(int64(runeOutputs)), new(big.Int))
-		if !numbers.IsZero(rem) {
-			runestone.Edicts = append(runestone.Edicts, runes.Edict{
-				RuneID: runes.RuneID{},
-				Amount: rem,
-				Output: 1,
-			})
+		runestone.Edicts[len(runestone.Edicts)-1].Output = uint32(totalOutputs)
+		runestoneData, err = runestone.IntoScript()
+		if err != nil {
+			return result, err
 		}
-		runestone.Edicts = append(runestone.Edicts, runes.Edict{
-			RuneID: runes.RuneID{},
-			Amount: quo,
-			Output: uint32(totalOutputs),
-		})
-	}
-
-	runestoneData, err := runestone.IntoScript()
-	if err != nil {
-		return result, err
 	}
 
 	// runestone output (#0).
@@ -1230,62 +1390,108 @@ func (b *TxBuilder) buildRuneEtchTxPSBT(params BuildRuneEtchTxPSBTParams) ([]byt
 	return w.Bytes(), nil
 }
 
-// PrepareUTXOs selects utxos to cover rough estimated fee.
-// Returns used utxos, total satoshi amount of utxos, rough estimation in satoshi and error if any.
-func PrepareUTXOs(params PrepareUTXOsParams) (result PrepareUTXOsResult, err error) {
-	satFn := func(u *bitcoin.UTXO) *big.Int { return u.Amount }
+// PrepareUTXOsParams holds UTXO management params.
+//
+//	Required parameter groups:
+//	PrepareTransferOnly() -> PaymentData, TransferAmount.
+//	Prepare() -> PaymentData, Outputs, ExtraExpenses, TransferAmount, SatoshiPerKVByte.
+type PrepareUTXOsParams struct {
+	*PaymentData
+	Outputs          int
+	ExtraExpenses    *big.Int
+	TransferAmount   *big.Int
+	SatoshiPerKVByte *big.Int
 
-	var fullParams = !(params.SatoshiPerKVByte == nil && params.Inputs == 0 && params.Outputs == 0)
-	for i := 1; i <= len(params.Utxos); i++ {
-		if fullParams {
-			// INFO: vB * ( sat / kvB ) = 1000 sat.
-			result.RoughEstimate = new(big.Int).Mul(RoughTxSizeEstimate(i+params.Inputs, params.Outputs),
-				params.SatoshiPerKVByte)
-			result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
+	amountFn func(u *bitcoin.UTXO) *big.Int // field for internal usage.
+}
 
-			result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.Utxos, satFn,
-				new(big.Int).Add(result.RoughEstimate, params.TransferAmount), i, InsufficientNativeBalanceError)
-		} else {
-			result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.Utxos, satFn,
-				new(big.Int).Set(params.TransferAmount), i, InsufficientNativeBalanceError)
-		}
-		if err != nil {
-			if errors.As(err, new(*InsufficientError)) && i != len(params.Utxos) {
-				continue
-			}
+// prepare performs utxo selection management with provided action usage.
+func (params *PrepareUTXOsParams) prepare(action func(utxoNum int, result *PrepareUTXOsResult) error) (result PrepareUTXOsResult, err error) {
+	params.amountFn = func(u *bitcoin.UTXO) *big.Int { return u.Amount }
 
-			return result, err
+	for i := 1; i <= len(params.UTXOs); i++ {
+		err = action(i, &result)
+		if err == nil {
+			return result, nil
 		}
 
-		return result, nil
+		if errors.As(err, new(*InsufficientError)) && i != len(params.UTXOs) {
+			continue
+		}
+
+		return result, err
+	}
+
+	rtse := &RoughTxSize{
+		IncludeHeader: true,
+		Elements: []*EstimationElement{{
+			PaymentDataFees: params.FeesData,
+			InputsNumber:    1 + len(params.UTXOs),
+			OutputsNumber:   params.Outputs,
+		}},
+		ExtraExpenses: params.ExtraExpenses,
 	}
 
 	// INFO: vB * ( sat / kvB ) = 1000 sat.
-	result.RoughEstimate = new(big.Int).Mul(RoughTxSizeEstimate(1+params.Inputs, params.Outputs),
-		params.SatoshiPerKVByte)
+	result.RoughEstimate = new(big.Int).Mul(rtse.Estimate(), params.SatoshiPerKVByte)
 	result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
 	need := new(big.Int).Add(result.RoughEstimate, params.TransferAmount)
 
 	return result, InsufficientNativeBalanceError.clarify(need, big.NewInt(0))
 }
 
-// PrepareUTXOsParams defines parameters for PrepareUTXOs function.
-//
-//	Parameter groups:
-//	- Utxos, TransferAmount - to select utxos for transfer only.
-//	- Utxos, Inputs, Outputs, TransferAmount, SatoshiPerKVByte - to select utxos for transfer including fee estimation.
-type PrepareUTXOsParams struct {
-	Utxos            []bitcoin.UTXO
-	Inputs           int
-	Outputs          int
-	TransferAmount   *big.Int
-	SatoshiPerKVByte *big.Int
+// Prepare selects utxos to cover transfer amount with rough estimated fee.
+// NOTE: Required params: PaymentData, Outputs, ExtraExpenses, TransferAmount, SatoshiPerKVByte.
+func (params *PrepareUTXOsParams) Prepare() (PrepareUTXOsResult, error) {
+	return params.prepare(func(utxoNum int, result *PrepareUTXOsResult) (err error) {
+		rtse := &RoughTxSize{
+			IncludeHeader: true,
+			Elements: []*EstimationElement{{
+				PaymentDataFees: params.FeesData,
+				InputsNumber:    utxoNum,
+				OutputsNumber:   params.Outputs,
+			}},
+			ExtraExpenses: params.ExtraExpenses,
+		}
+
+		// INFO: vB * ( sat / kvB ) = 1000 sat.
+		result.RoughEstimate = new(big.Int).Mul(rtse.Estimate(), params.SatoshiPerKVByte)
+		result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
+
+		minAmount := new(big.Int).Add(result.RoughEstimate, params.TransferAmount)
+		result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.UTXOs, params.amountFn,
+			minAmount, utxoNum, InsufficientNativeBalanceError)
+
+		return err
+	})
+}
+
+// PrepareTransferOnly selects utxos to cover transfer amount only.
+// NOTE: Required params: PaymentData, TransferAmount.
+func (params *PrepareUTXOsParams) PrepareTransferOnly() (result PrepareUTXOsResult, err error) {
+	return params.prepare(func(utxoNum int, result *PrepareUTXOsResult) (err error) {
+		result.RoughEstimate = (&RoughTxSize{
+			IncludeHeader: true,
+			Elements: []*EstimationElement{{
+				PaymentDataFees: params.FeesData,
+				InputsNumber:    utxoNum,
+				OutputsNumber:   params.Outputs,
+			}},
+			ExtraExpenses: params.ExtraExpenses,
+		}).Estimate()
+
+		minAmount := new(big.Int).Set(params.TransferAmount)
+		result.UsedUTXOs, result.TotalAmount, err = SelectUTXO(params.UTXOs, params.amountFn,
+			minAmount, utxoNum, InsufficientNativeBalanceError)
+
+		return err
+	})
 }
 
 // PrepareUTXOsResult describes result of the PrepareUTXOs function.
 // In case all values in the PrepareUTXOsParams were transmitted,
-// all values of the PrepareUTXOsResult will be created. Otherwise,
-// RoughEstimate will be zero on nil.
+// all values of the PrepareUTXOsResult will be created.
+// Otherwise, RoughEstimate will be zero or nil.
 type PrepareUTXOsResult struct {
 	UsedUTXOs     []*bitcoin.UTXO
 	TotalAmount   *big.Int
@@ -1319,35 +1525,6 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 	}
 
 	return nil, nil, InsufficientRuneBalanceError.clarify(transferAmount, big.NewInt(0))
-}
-
-// RoughTxSizeEstimate returns Tx rough estimated size in vBytes.
-// TODO: increase precision.
-func RoughTxSizeEstimate(inputs, outputs int) *big.Int {
-	size := new(big.Int).Set(headerSizeVBytes)
-	size.Add(size, new(big.Int).Mul(inputSizeVBytes, big.NewInt(int64(inputs))))
-	size.Add(size, new(big.Int).Mul(outputSizeVBytes, big.NewInt(int64(outputs))))
-
-	return size
-}
-
-// RoughEtchFeeEstimate returns etch transaction rough estimate in satoshi.
-// TODO: increase precision.
-func RoughEtchFeeEstimate(inscriptionWitnessSize, satoshiPerKVByte *big.Int, premineSplittingFactor int) (etchTransactionFee *big.Int) {
-	// INFO:
-	// header: static value [vB]
-	// inputs: inscription witness data + raw inscription input size [vB]
-	// outputs: runes protocol, runes recipient * premine splitting factor, btc change [vB]
-	// (header + inputs + outputs) * fee rate / 1000 = tx fee in satoshi
-	// [vB] * 1000 [sat/vB] / 1000 = sat.
-	//
-	// estimate runes protocol as maximum possible (3 * simple output ~ 80-90 vB).
-	etchTransactionFee = new(big.Int).Add(inscriptionInputSizeVBytes, inscriptionWitnessSize)      // inputs [vB].
-	etchTransactionFee.Add(etchTransactionFee, RoughTxSizeEstimate(0, 2+2+premineSplittingFactor)) // outputs + header [vB].
-	etchTransactionFee.Mul(etchTransactionFee, satoshiPerKVByte)                                   // multiply by fee rate [vB * 1000(sat/vB)].
-	etchTransactionFee.Div(etchTransactionFee, big.NewInt(1000))                                   // reduce kilo value [sat].
-
-	return etchTransactionFee
 }
 
 // SelectUTXO is a partly greedy selection algorithm for UTXOs with 'requiredUTXOs' parameter.
