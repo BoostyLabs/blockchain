@@ -8,32 +8,32 @@ import (
 	"math/big"
 )
 
-type balanceErrorType string
+type BalanceErrorType string
 
-type causerSign string
+type CauserSign string
 
 const (
 	// InsufficientErrorTypeBitcoin defines insufficient bitcoin balance error type.
-	InsufficientErrorTypeBitcoin balanceErrorType = "bitcoin"
+	InsufficientErrorTypeBitcoin BalanceErrorType = "bitcoin"
 	// InsufficientErrorTypeRune defines insufficient rune balance error type.
-	InsufficientErrorTypeRune balanceErrorType = "rune"
+	InsufficientErrorTypeRune BalanceErrorType = "rune"
 
 	// CauserSender defines that the sender caused this error type.
-	CauserSender causerSign = "sender"
+	CauserSender CauserSign = "sender"
 	// CauserFeePayer defines that the fee-payer caused this error type.
-	CauserFeePayer causerSign = "fee-payer"
+	CauserFeePayer CauserSign = "fee-payer"
 )
 
 // InsufficientError is the error type to describe insufficient balance errors with details.
 type InsufficientError struct {
-	Type   balanceErrorType
+	Type   BalanceErrorType
 	Need   *big.Int
 	Have   *big.Int
-	Causer causerSign
+	Causer CauserSign
 }
 
 // NewInsufficientError is a constructor for InsufficientError.
-func NewInsufficientError(type_ balanceErrorType, need, have *big.Int) *InsufficientError {
+func NewInsufficientError(type_ BalanceErrorType, need, have *big.Int) *InsufficientError {
 	return &InsufficientError{type_, need, have, ""}
 }
 
@@ -57,13 +57,13 @@ func (e *InsufficientError) Is(target error) bool {
 	return e.Error() == target.Error()
 }
 
-// clarify returns formed error with Need and Have values set.
-func (e *InsufficientError) clarify(need, have *big.Int) *InsufficientError {
+// Clarify returns formed error with Need and Have values set.
+func (e *InsufficientError) Clarify(need, have *big.Int) *InsufficientError {
 	return &InsufficientError{e.Type, need, have, e.Causer}
 }
 
 // setCauser updates InsufficientError with provided causer.
-func (e *InsufficientError) setCauser(causer causerSign) *InsufficientError {
+func (e *InsufficientError) setCauser(causer CauserSign) *InsufficientError {
 	e.Causer = causer
 	return e
 }
