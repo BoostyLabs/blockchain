@@ -62,8 +62,8 @@ func (e *InsufficientError) Clarify(need, have *big.Int) *InsufficientError {
 	return &InsufficientError{e.Type, need, have, e.Causer}
 }
 
-// setCauser updates InsufficientError with provided causer.
-func (e *InsufficientError) setCauser(causer CauserSign) *InsufficientError {
+// SetCauser updates InsufficientError with provided causer.
+func (e *InsufficientError) SetCauser(causer CauserSign) *InsufficientError {
 	e.Causer = causer
 	return e
 }
