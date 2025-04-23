@@ -35,6 +35,16 @@ type SignTaprootMultiParams struct {
 	TapScriptPrivateKeys []*btcec.PrivateKey // holds private keys needed to unlock MultiSig tapScript. Key-spend path will be used in case of empty array.
 }
 
+// SignTaprootMultiAppendParams defines parameters for SignTaprootMultiAppend method.
+//
+// NOTE: TapScriptPrivateKey must be used in reverse order relatively to public keys in locking script!!!
+// See [SignTaprootMultiParams].
+type SignTaprootMultiAppendParams struct {
+	SerializedPSBT      []byte
+	Inputs              []int             // inputs indexes.
+	TapScriptPrivateKey *btcec.PrivateKey // holds the next private key needed to unlock MultiSig tapScript
+}
+
 // signTaprootInputParams defines parameters for signTaprootInput method.
 type signTaprootInputParams struct {
 	packet               *psbt.Packet
@@ -138,6 +148,16 @@ func (signer *Signer) SignTaprootMulti(params SignTaprootMultiParams) ([]byte, e
 	}
 
 	return w.Bytes(), nil
+}
+
+// SignTaprootMultiAppend appends provided psbt with signature taproot inputs by provided indexes using one (the next) private keys, returns updated serialized PSBT.
+// NOTE: See [SignTaprootMultiParams] comments for valid signature processing (the order must be the same).
+func (signer *Signer) SignTaprootMultiAppend(params SignTaprootMultiAppendParams) ([]byte, error) {
+	return signer.SignTaprootMulti(SignTaprootMultiParams{
+		SerializedPSBT:       params.SerializedPSBT,
+		Inputs:               params.Inputs,
+		TapScriptPrivateKeys: []*btcec.PrivateKey{params.TapScriptPrivateKey},
+	})
 }
 
 // signTaprootInput signs taproot input with or without witness script with provided private keys.

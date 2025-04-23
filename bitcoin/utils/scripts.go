@@ -13,21 +13,23 @@ import (
 )
 
 // NewTaprootMultiSigLeafTapScript generates N of N multi-sig locking script for taproot leaf.
+//
 // INFO: Script will have the next format: {<pubKey1> OP_CHECKSIG [<pubKey2> OP_CHECKSIG_ADD [<pubKey3> OP_CHECKSIG_ADD ...]] <signListSize> OP_EQUAL}.
-// NOTE: At least 2 private keys for multi-sig script generation is required.
-func NewTaprootMultiSigLeafTapScript(privateKeys ...*btcec.PrivateKey) ([]byte, error) {
-	if len(privateKeys) < 2 {
-		return nil, errors.New("at least 2 private keys are required")
+//
+// NOTE: At least 2 keys for multi-sig script generation is required.
+func NewTaprootMultiSigLeafTapScript(keys ...*btcec.PublicKey) ([]byte, error) {
+	if len(keys) < 2 {
+		return nil, errors.New("at least 2 keys are required")
 	}
-	if len(privateKeys) > 999 {
-		return nil, errors.New("max allowed private keys: 999")
+	if len(keys) > 999 {
+		return nil, errors.New("max allowed keys: 999")
 	}
 
 	checkSigOp := byte(txscript.OP_CHECKSIG)
 	scriptBuilder := txscript.NewScriptBuilder()
-	for i, privateKey := range privateKeys {
+	for i, key := range keys {
 		scriptBuilder.
-			AddData(privateKey.PubKey().SerializeCompressed()[1:]).
+			AddData(key.SerializeCompressed()[1:]).
 			AddOp(checkSigOp)
 		if i == 0 {
 			checkSigOp = txscript.OP_CHECKSIGADD
@@ -35,14 +37,14 @@ func NewTaprootMultiSigLeafTapScript(privateKeys ...*btcec.PrivateKey) ([]byte, 
 	}
 
 	return scriptBuilder.
-		AddInt64(int64(len(privateKeys))).
+		AddInt64(int64(len(keys))).
 		AddOp(txscript.OP_EQUAL).
 		Script()
 }
 
 // MustTaprootMultiSigLeafTapScript uses NewTaprootMultiSigLeafTapScript, panics in case of error.
-func MustTaprootMultiSigLeafTapScript(privateKeys ...*btcec.PrivateKey) []byte {
-	script, err := NewTaprootMultiSigLeafTapScript(privateKeys...)
+func MustTaprootMultiSigLeafTapScript(keys ...*btcec.PublicKey) []byte {
+	script, err := NewTaprootMultiSigLeafTapScript(keys...)
 	if err != nil {
 		panic(err)
 	}

@@ -47,7 +47,7 @@ var (
 	nonDustBitcoinAmount = big.NewInt(546)
 )
 
-// NonDustBitcoinAmount provides public usage of variable nonDustBitcoinAmount
+// NonDustBitcoinAmount provides public usage of variable nonDustBitcoinAmount.
 func NonDustBitcoinAmount() *big.Int { return big.NewInt(546) }
 
 const (

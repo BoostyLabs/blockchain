@@ -154,15 +154,15 @@ func TestSignerMulti(t *testing.T) {
 	}
 
 	// INFO: Build MultiSig 4 of 4.
-	leafTapScript, err := utils.NewTaprootMultiSigLeafTapScript(tapScriptPrivateKey1, tapScriptPrivateKey2,
-		tapScriptPrivateKey3, tapScriptPrivateKey4)
+	leafTapScript, err := utils.NewTaprootMultiSigLeafTapScript(tapScriptPrivateKey1.PubKey(), tapScriptPrivateKey2.PubKey(),
+		tapScriptPrivateKey3.PubKey(), tapScriptPrivateKey4.PubKey())
 	require.NoErrorf(t, err, "leaf tapScript building")
 
 	leafTapScriptUnspendable, err := utils.NewUnspendableScript([]byte("really_unspendable_!")...)
 	require.NoErrorf(t, err, "leaf tapScript unspendable building")
 
 	// INFO: Generate Taproot address.
-	taprootAddress, err := utils.NewTaprootAddressFromScripts(chainParams, masterPrivateKey, leafTapScript, leafTapScriptUnspendable)
+	taprootAddress, err := utils.NewTaprootAddressFromScripts(chainParams, masterPrivateKey.PubKey(), leafTapScript, leafTapScriptUnspendable)
 	require.NoErrorf(t, err, "taproot address generation")
 
 	// INFO: Generate TapScript tree.
@@ -253,6 +253,127 @@ func TestSignerMulti(t *testing.T) {
 
 			err = prepareMultiSigEngine(t, signedPSBTBytes).Execute()
 			require.ErrorIs(t, err, test.err)
+		})
+	}
+}
+
+func TestSignerMultiAppend(t *testing.T) {
+	chainParams := &chaincfg.MainNetParams
+	s := signer.NewSigner(chainParams)
+
+	var (
+		masterPrivateKey,
+		tapScriptPrivateKey1, tapScriptPrivateKey2,
+		tapScriptPrivateKey3, tapScriptPrivateKey4,
+		invalidPrivateKey1, invalidPrivateKey2 *btcec.PrivateKey
+		err error
+	)
+	for _, privateKeyP := range []**btcec.PrivateKey{
+		&masterPrivateKey, &tapScriptPrivateKey1, &tapScriptPrivateKey2,
+		&tapScriptPrivateKey3, &tapScriptPrivateKey4, &invalidPrivateKey1, &invalidPrivateKey2,
+	} {
+		*privateKeyP, err = btcec.NewPrivateKey()
+		require.NoError(t, err)
+	}
+
+	// INFO: Build MultiSig 4 of 4.
+	leafTapScript, err := utils.NewTaprootMultiSigLeafTapScript(tapScriptPrivateKey1.PubKey(), tapScriptPrivateKey2.PubKey(),
+		tapScriptPrivateKey3.PubKey(), tapScriptPrivateKey4.PubKey())
+	require.NoErrorf(t, err, "leaf tapScript building")
+
+	leafTapScriptUnspendable, err := utils.NewUnspendableScript([]byte("really_unspendable_!")...)
+	require.NoErrorf(t, err, "leaf tapScript unspendable building")
+
+	// INFO: Generate Taproot address.
+	taprootAddress, err := utils.NewTaprootAddressFromScripts(chainParams, masterPrivateKey.PubKey(), leafTapScript, leafTapScriptUnspendable)
+	require.NoErrorf(t, err, "taproot address generation")
+
+	// INFO: Generate TapScript tree.
+	tapScriptTree, err := utils.NewTapScriptTreeFromRawScripts(leafTapScript, leafTapScriptUnspendable)
+	require.NoErrorf(t, err, "tapScript tree generation")
+
+	invalidTapScriptTree, err := utils.NewTapScriptTreeFromRawScripts(leafTapScript)
+	require.NoErrorf(t, err, "tapScript tree invalid generation")
+
+	masterPublicKeyXOnly := masterPrivateKey.PubKey().SerializeCompressed()[1:]
+
+	tests := []struct {
+		name                 string
+		tapScriptPrivateKeys []*btcec.PrivateKey
+		tapScriptTree        *txscript.IndexedTapScriptTree
+		err                  error
+	}{
+		{
+			name:                 "valid 4 of 4 signature",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        tapScriptTree,
+		},
+		{
+			name:                 "not enough signatures (3 of 4 private keys for leaf signatures)",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrInvalidStackOperation, Description: "index 0 is invalid for stack size 0"},
+		},
+		{
+			name:                 "private keys invalid order",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey1, tapScriptPrivateKey2, tapScriptPrivateKey3, tapScriptPrivateKey4},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrNullFail, Description: "signature not empty on failed checksig"},
+		},
+		{
+			name:                 "invalid leaf keys",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{invalidPrivateKey1, tapScriptPrivateKey3, tapScriptPrivateKey2, invalidPrivateKey2},
+			tapScriptTree:        tapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrNullFail, Description: "signature not empty on failed checksig"},
+		},
+		{
+			name:                 "unable to unlock by script spend path without correct script tree",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			err:                  txscript.Error{ErrorCode: txscript.ErrTaprootMerkleProofInvalid},
+		},
+		{
+			name:                 "unable to unlock by script spend path with incorrect script tree",
+			tapScriptPrivateKeys: []*btcec.PrivateKey{tapScriptPrivateKey4, tapScriptPrivateKey3, tapScriptPrivateKey2, tapScriptPrivateKey1},
+			tapScriptTree:        invalidTapScriptTree,
+			err:                  txscript.Error{ErrorCode: txscript.ErrTaprootMerkleProofInvalid},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var signedPSBTs [2][]byte
+			t.Run("group signature", func(t *testing.T) {
+				packetBytes := prepareTxPacketBytes(t, taprootAddress, masterPublicKeyXOnly, leafTapScript, test.tapScriptTree)
+
+				signedPSBTs[0], err = s.SignTaprootMulti(signer.SignTaprootMultiParams{
+					SerializedPSBT:       packetBytes,
+					Inputs:               []int{0},
+					TapScriptPrivateKeys: test.tapScriptPrivateKeys,
+				})
+				require.NoError(t, err)
+
+				err = prepareMultiSigEngine(t, signedPSBTs[0]).Execute()
+				require.ErrorIs(t, err, test.err)
+			})
+
+			t.Run("append signature", func(t *testing.T) {
+				packetBytes := prepareTxPacketBytes(t, taprootAddress, masterPublicKeyXOnly, leafTapScript, test.tapScriptTree)
+
+				signParams := signer.SignTaprootMultiAppendParams{
+					SerializedPSBT: packetBytes,
+					Inputs:         []int{0},
+				}
+				for _, tapScriptPrivateKey := range test.tapScriptPrivateKeys {
+					signParams.TapScriptPrivateKey = tapScriptPrivateKey
+					signParams.SerializedPSBT, err = s.SignTaprootMultiAppend(signParams)
+					require.NoError(t, err)
+				}
+
+				signedPSBTs[1] = signParams.SerializedPSBT
+				err = prepareMultiSigEngine(t, signedPSBTs[1]).Execute()
+				require.ErrorIs(t, err, test.err)
+			})
+
+			require.EqualValues(t, signedPSBTs[0], signedPSBTs[1])
 		})
 	}
 }
