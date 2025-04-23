@@ -48,7 +48,7 @@ var (
 )
 
 // NonDustBitcoinAmount provides public usage of variable nonDustBitcoinAmount
-func NonDustBitcoinAmount() *big.Int { return nonDustBitcoinAmount }
+func NonDustBitcoinAmount() *big.Int { return big.NewInt(546) }
 
 const (
 	// recipientOutput defines runes output for recipient (transferring) by base rune tx.
@@ -360,7 +360,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, totalAllocatingRuneAmount, params.RuneID)
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserSender)
+			return result, errIns.SetCauser(CauserSender)
 		}
 
 		return result, err
@@ -443,7 +443,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserFeePayer)
+			return result, errIns.SetCauser(CauserFeePayer)
 		}
 
 		return result, err
@@ -689,7 +689,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).PrepareTransferOnly()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserSender)
+				return result, errIns.SetCauser(CauserSender)
 			}
 
 			return result, err
@@ -716,7 +716,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserFeePayer)
+				return result, errIns.SetCauser(CauserFeePayer)
 			}
 
 			return result, err
@@ -737,7 +737,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserSender)
+				return result, errIns.SetCauser(CauserSender)
 			}
 
 			return result, err
@@ -1015,7 +1015,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserSender)
+			return result, errIns.SetCauser(CauserSender)
 		}
 
 		return result, err
@@ -1255,7 +1255,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		if params.AdditionalPayments == nil {
 			return result, InsufficientNativeBalanceError.
 				Clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount).
-				setCauser(CauserSender)
+				SetCauser(CauserSender)
 		}
 
 		prepareUTXOsResult, err = (&PrepareUTXOsParams{
@@ -1266,7 +1266,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserFeePayer)
+				return result, errIns.SetCauser(CauserFeePayer)
 			}
 
 			return result, err
