@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"slices"
 
-	"github.com/BoostyLabs/blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/pkg/sequencereader"
 )
 
 // Edict defines transfer values of the rune protocol.

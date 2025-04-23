@@ -20,7 +20,7 @@ import (
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
 	"github.com/BoostyLabs/blockchain/bitcoin/txbuilder"
-	"github.com/BoostyLabs/blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/pkg/numbers"
 )
 
 func TestTxBuilder(t *testing.T) {

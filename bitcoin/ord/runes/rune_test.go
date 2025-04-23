@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/pkg/numbers"
 )
 
 func TestRunes(t *testing.T) {

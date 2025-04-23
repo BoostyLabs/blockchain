@@ -16,8 +16,8 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/reverse"
-	"github.com/BoostyLabs/blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/pkg/reverse"
+	"github.com/BoostyLabs/blockchain/pkg/sequencereader"
 )
 
 // ErrMalformedInscription defines that inscription is malformed and failed to parse.
