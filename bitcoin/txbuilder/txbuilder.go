@@ -19,7 +19,7 @@ import (
 	"github.com/BoostyLabs/blockchain/bitcoin"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/pkg/numbers"
 )
 
 var (
@@ -46,6 +46,9 @@ var (
 	// nonDustBitcoinAmount defined the smallest needed amount in satoshi to link to rune output.
 	nonDustBitcoinAmount = big.NewInt(546)
 )
+
+// NonDustBitcoinAmount provides public usage of variable nonDustBitcoinAmount
+func NonDustBitcoinAmount() *big.Int { return big.NewInt(546) }
 
 const (
 	// recipientOutput defines runes output for recipient (transferring) by base rune tx.
@@ -357,7 +360,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	runeUTXOs, totalRuneAmount, err := PrepareRuneUTXOs(params.RunesSender.UTXOs, totalAllocatingRuneAmount, params.RuneID)
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserSender)
+			return result, errIns.SetCauser(CauserSender)
 		}
 
 		return result, err
@@ -440,7 +443,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserFeePayer)
+			return result, errIns.SetCauser(CauserFeePayer)
 		}
 
 		return result, err
@@ -473,7 +476,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// recipient runes output (#1).
 	if isRunesTransferred {
-		err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesRecipientAddress)
+		err = b.AddOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesRecipientAddress)
 		if err != nil {
 			return result, err
 		}
@@ -481,7 +484,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// change runes output (#2).
 	if runestone.Pointer != nil {
-		err = b.addOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesSender.Address)
+		err = b.AddOutput(tx, nonDustBitcoinAmount, prepareUTXOsResult.TotalAmount, params.RunesSender.Address)
 		if err != nil {
 			return result, err
 		}
@@ -489,7 +492,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// service commission output (#3).
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		err = b.addOutput(tx, params.SatoshiCommissionAmount, prepareUTXOsResult.TotalAmount, params.CommissionRecipientAddress)
+		err = b.AddOutput(tx, params.SatoshiCommissionAmount, prepareUTXOsResult.TotalAmount, params.CommissionRecipientAddress)
 		if err != nil {
 			return result, err
 		}
@@ -497,7 +500,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 
 	// change btc output (#4).
 	if numbers.IsPositive(prepareUTXOsResult.TotalAmount) && numbers.IsGreater(prepareUTXOsResult.TotalAmount, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, prepareUTXOsResult.TotalAmount, prepareUTXOsResult.TotalAmount, params.FeePayer.Address)
+		err = b.AddOutput(tx, prepareUTXOsResult.TotalAmount, prepareUTXOsResult.TotalAmount, params.FeePayer.Address)
 		if err != nil {
 			return result, err
 		}
@@ -686,7 +689,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).PrepareTransferOnly()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserSender)
+				return result, errIns.SetCauser(CauserSender)
 			}
 
 			return result, err
@@ -713,7 +716,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserFeePayer)
+				return result, errIns.SetCauser(CauserFeePayer)
 			}
 
 			return result, err
@@ -734,7 +737,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserSender)
+				return result, errIns.SetCauser(CauserSender)
 			}
 
 			return result, err
@@ -769,14 +772,14 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 	bitcoinAmount.Sub(bitcoinAmount, fee)
 
 	// recipient btc output (#0).
-	err = b.addOutput(tx, params.TransferSatoshiAmount, bitcoinAmount, params.RecipientAddress)
+	err = b.AddOutput(tx, params.TransferSatoshiAmount, bitcoinAmount, params.RecipientAddress)
 	if err != nil {
 		return result, err
 	}
 
 	// service commission output (#1).
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		err = b.addOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.CommissionReceiverAddress)
+		err = b.AddOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.CommissionReceiverAddress)
 		if err != nil {
 			return result, err
 		}
@@ -784,7 +787,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 
 	// sender's change btc output (#2).
 	if !numbers.IsLess(senderChange, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, senderChange, bitcoinAmount, params.Sender.Address)
+		err = b.AddOutput(tx, senderChange, bitcoinAmount, params.Sender.Address)
 		if err != nil {
 			return result, err
 		}
@@ -792,7 +795,7 @@ func (b *TxBuilder) buildBaseTransferBTCTx(params BaseBTCTransferParams) (result
 
 	// fee payer's change btc output (#3).
 	if differentFeePayer && !numbers.IsLess(feePayerChange, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, feePayerChange, bitcoinAmount, params.FeePayer.Address)
+		err = b.AddOutput(tx, feePayerChange, bitcoinAmount, params.FeePayer.Address)
 		if err != nil {
 			return result, err
 		}
@@ -1012,7 +1015,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	}).Prepare()
 	if err != nil {
 		if errIns := new(InsufficientError); errors.As(err, &errIns) {
-			return result, errIns.setCauser(CauserSender)
+			return result, errIns.SetCauser(CauserSender)
 		}
 
 		return result, err
@@ -1034,14 +1037,14 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 	bitcoinAmount.Sub(bitcoinAmount, senderUTXOsResult.RoughEstimate)
 
 	// inscription commitment output (#0).
-	err = b.addOutput(tx, depositAmount, bitcoinAmount, inscriptionAddress)
+	err = b.AddOutput(tx, depositAmount, bitcoinAmount, inscriptionAddress)
 	if err != nil {
 		return result, err
 	}
 
 	// service commission output (#1).
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		err = b.addOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.CommissionReceiverAddress)
+		err = b.AddOutput(tx, params.SatoshiCommissionAmount, bitcoinAmount, params.CommissionReceiverAddress)
 		if err != nil {
 			return result, err
 		}
@@ -1049,7 +1052,7 @@ func (b *TxBuilder) buildBaseInscriptionTx(params BaseInscriptionTxParams) (resu
 
 	// sender's change btc output (#2).
 	if numbers.IsGreater(bitcoinAmount, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.Sender.Address)
+		err = b.AddOutput(tx, bitcoinAmount, bitcoinAmount, params.Sender.Address)
 		if err != nil {
 			return result, err
 		}
@@ -1251,8 +1254,8 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 	if numbers.IsGreater(transferAmount, params.InscriptionReveal.UTXOs[0].Amount) {
 		if params.AdditionalPayments == nil {
 			return result, InsufficientNativeBalanceError.
-				clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount).
-				setCauser(CauserSender)
+				Clarify(transferAmount, params.InscriptionReveal.UTXOs[0].Amount).
+				SetCauser(CauserSender)
 		}
 
 		prepareUTXOsResult, err = (&PrepareUTXOsParams{
@@ -1263,7 +1266,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 		}).Prepare()
 		if err != nil {
 			if errIns := new(InsufficientError); errors.As(err, &errIns) {
-				return result, errIns.setCauser(CauserFeePayer)
+				return result, errIns.SetCauser(CauserFeePayer)
 			}
 
 			return result, err
@@ -1288,7 +1291,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 
 	// recipient runes output (#1 - psf).
 	for i := 0; i < runeOutputs; i++ {
-		err = b.addOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RunesRecipientAddress)
+		err = b.AddOutput(tx, nonDustBitcoinAmount, bitcoinAmount, params.RunesRecipientAddress)
 		if err != nil {
 			return result, err
 		}
@@ -1296,7 +1299,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 
 	// change btc output (#psf+1).
 	if numbers.IsPositive(bitcoinAmount) && numbers.IsGreater(bitcoinAmount, nonDustBitcoinAmount) {
-		err = b.addOutput(tx, bitcoinAmount, bitcoinAmount, params.SatoshiChangeAddress)
+		err = b.AddOutput(tx, bitcoinAmount, bitcoinAmount, params.SatoshiChangeAddress)
 		if err != nil {
 			return result, err
 		}
@@ -1437,7 +1440,7 @@ func (params *PrepareUTXOsParams) prepare(action func(utxoNum int, result *Prepa
 	result.RoughEstimate.Div(result.RoughEstimate, big.NewInt(1000)) // sat.
 	need := new(big.Int).Add(result.RoughEstimate, params.TransferAmount)
 
-	return result, InsufficientNativeBalanceError.clarify(need, big.NewInt(0))
+	return result, InsufficientNativeBalanceError.Clarify(need, big.NewInt(0))
 }
 
 // Prepare selects utxos to cover transfer amount with rough estimated fee.
@@ -1524,7 +1527,7 @@ func PrepareRuneUTXOs(utxos []bitcoin.UTXO, transferAmount *big.Int, runeID rune
 		return usedUTXOs, totalAmount, nil
 	}
 
-	return nil, nil, InsufficientRuneBalanceError.clarify(transferAmount, big.NewInt(0))
+	return nil, nil, InsufficientRuneBalanceError.Clarify(transferAmount, big.NewInt(0))
 }
 
 // SelectUTXO is a partly greedy selection algorithm for UTXOs with 'requiredUTXOs' parameter.
@@ -1567,14 +1570,14 @@ func SelectUTXO(utxos []bitcoin.UTXO, amountFn func(*bitcoin.UTXO) *big.Int, min
 	}
 
 	if numbers.IsGreater(minAmount, totalAmount) {
-		return nil, nil, insufficientBalanceError.clarify(minAmount, totalAmount)
+		return nil, nil, insufficientBalanceError.Clarify(minAmount, totalAmount)
 	}
 
 	return usedUTXOs, totalAmount, nil
 }
 
-// addOutput adds output to transaction, subtracts amount from unallocated amount.
-func (b *TxBuilder) addOutput(tx *wire.MsgTx, amount, unallocatedAmount *big.Int, address string) error {
+// AddOutput adds output to transaction, subtracts amount from unallocated amount.
+func (b *TxBuilder) AddOutput(tx *wire.MsgTx, amount, unallocatedAmount *big.Int, address string) error {
 	if numbers.IsLess(unallocatedAmount, amount) {
 		return fmt.Errorf("the rest of the unallocated btc amount (%s) is less than the output allocating amount (%s)",
 			unallocatedAmount.String(), amount.String())
