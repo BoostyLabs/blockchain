@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/BoostyLabs/blockchain/internal/numbers"
+	"github.com/BoostyLabs/blockchain/pkg/numbers"
 )
 
 // DefaultSpacer defines default spacer for Rune name.

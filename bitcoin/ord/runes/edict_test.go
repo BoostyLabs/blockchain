@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
-	"github.com/BoostyLabs/blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/pkg/sequencereader"
 )
 
 func TestEdicts(t *testing.T) {

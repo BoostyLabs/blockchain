@@ -14,7 +14,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes/utils"
-	"github.com/BoostyLabs/blockchain/internal/sequencereader"
+	"github.com/BoostyLabs/blockchain/pkg/sequencereader"
 )
 
 const (
