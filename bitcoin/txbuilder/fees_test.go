@@ -43,7 +43,7 @@ func TestNewDefaultPaymentDataFees(t *testing.T) {
 		{
 			name:    "P2WPKH",
 			address: btcutilAddress(t, "bc1qhl00zlummcd9zc5ppu3klmnp4m7slkuvuq4lz0", chainParams),
-			sum:     99,
+			sum:     108,
 		},
 		{
 			name:    "P2WSH",
@@ -78,6 +78,56 @@ func TestNewDefaultPaymentDataFees(t *testing.T) {
 			sum.Add(sum, got.OutputSizeVBytes)
 			require.EqualValues(t, test.sum, sum.Int64())
 		})
+	}
+}
+
+func TestTxSizeEstimation(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	bridge, err := txbuilder.NewDefaultPaymentDataFees(btcutilAddress(t, "bc1pvep2j3hym7tp69zyd3pwhe7a7exztrtg6wwhdd66fwx2ewfwag7qgawmug", params))
+	require.NoError(t, err)
+
+	bridge.WitnessSizeVBytes.SetInt64(92) // INFO: Not standard script.
+
+	sender, err := txbuilder.NewDefaultPaymentDataFees(btcutilAddress(t, "bc1p9spaecu0aszezcs2f48uk0fxcqgxry0menjn8jwjnv9pjmsew09s3j36k8", params))
+	require.NoError(t, err)
+
+	feePayer, err := txbuilder.NewDefaultPaymentDataFees(btcutilAddress(t, "bc1qhl00zlummcd9zc5ppu3klmnp4m7slkuvuq4lz0", params))
+	require.NoError(t, err)
+
+	commission, err := txbuilder.NewDefaultPaymentDataFees(btcutilAddress(t, "33qK7XqdJ3v5ySvnN9PugSRZsK2ahL5U1B", params))
+	require.NoError(t, err)
+
+	tests := []struct {
+		RoughTxSize *txbuilder.RoughTxSize
+		Estimation  int
+	}{
+		{
+			RoughTxSize: &txbuilder.RoughTxSize{
+				IncludeHeader: true,
+				Elements: []*txbuilder.EstimationElement{
+					{PaymentDataFees: bridge, InputsNumber: 6, OutputsNumber: 2},
+					{PaymentDataFees: sender, InputsNumber: 1, OutputsNumber: 0},
+				},
+				ExtraExpenses: big.NewInt(17),
+			},
+			Estimation: 970,
+		},
+		{
+			RoughTxSize: &txbuilder.RoughTxSize{
+				IncludeHeader: true,
+				Elements: []*txbuilder.EstimationElement{
+					{PaymentDataFees: bridge, InputsNumber: 0, OutputsNumber: 1},
+					{PaymentDataFees: sender, InputsNumber: 1, OutputsNumber: 1},
+					{PaymentDataFees: feePayer, InputsNumber: 1, OutputsNumber: 1},
+					{PaymentDataFees: commission, InputsNumber: 0, OutputsNumber: 1},
+				},
+				ExtraExpenses: big.NewInt(17),
+			},
+			Estimation: 312,
+		},
+	}
+	for _, test := range tests {
+		require.EqualValues(t, test.Estimation, test.RoughTxSize.Estimate().Int64())
 	}
 }
 
