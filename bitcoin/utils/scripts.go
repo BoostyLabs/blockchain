@@ -10,6 +10,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil/psbt"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 )
 
 // NewTaprootMultiSigLeafTapScript generates N of N multi-sig locking script for taproot leaf.
@@ -131,4 +132,10 @@ func UpdatePSBTInputWithTapScriptLeafData(input *psbt.PInput, tapScriptTree *txs
 	}
 
 	return nil
+}
+
+// CompactSize returns data size with compact size bytes counted.
+// Example, the slice len 515 is encoded as 0xfd0302 + slice size.
+func CompactSize(data []byte) int {
+	return wire.VarIntSerializeSize(uint64(len(data))) + len(data)
 }

@@ -43,7 +43,7 @@ func TestNewDefaultPaymentDataFees(t *testing.T) {
 		{
 			name:    "P2WPKH",
 			address: btcutilAddress(t, "bc1qhl00zlummcd9zc5ppu3klmnp4m7slkuvuq4lz0", chainParams),
-			sum:     108,
+			sum:     99,
 		},
 		{
 			name:    "P2WSH",
@@ -108,9 +108,9 @@ func TestTxSizeEstimation(t *testing.T) {
 					{PaymentDataFees: bridge, InputsNumber: 6, OutputsNumber: 2},
 					{PaymentDataFees: sender, InputsNumber: 1, OutputsNumber: 0},
 				},
-				ExtraExpenses: big.NewInt(17),
+				ExtraExpenses: big.NewInt(17 + 8 + 1),
 			},
-			Estimation: 970,
+			Estimation: 979,
 		},
 		{
 			RoughTxSize: &txbuilder.RoughTxSize{
@@ -121,7 +121,7 @@ func TestTxSizeEstimation(t *testing.T) {
 					{PaymentDataFees: feePayer, InputsNumber: 1, OutputsNumber: 1},
 					{PaymentDataFees: commission, InputsNumber: 0, OutputsNumber: 1},
 				},
-				ExtraExpenses: big.NewInt(17),
+				ExtraExpenses: big.NewInt(17 + 8 + 1),
 			},
 			Estimation: 312,
 		},

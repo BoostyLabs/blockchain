@@ -19,6 +19,7 @@ import (
 	"github.com/BoostyLabs/blockchain/bitcoin"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/inscriptions"
 	"github.com/BoostyLabs/blockchain/bitcoin/ord/runes"
+	"github.com/BoostyLabs/blockchain/bitcoin/utils"
 	"github.com/BoostyLabs/blockchain/pkg/numbers"
 )
 
@@ -36,6 +37,8 @@ const (
 	txVersion int32 = 2
 	// signHashType define signature hash type for input signing.
 	signHashType = txscript.SigHashAll
+	// outputAmountSize defines amount size in bytes located in output.
+	outputAmountSize = 8
 )
 
 var (
@@ -370,6 +373,7 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 	runestone := &runes.Runestone{}
 	isRunesTransferred := false
 	runesSenderOutputs := 0
+	var recipientAddressFeeElement *EstimationElement
 
 	// runes transfer output + edict.
 	if numbers.IsPositive(params.TransferRuneAmount) {
@@ -381,6 +385,11 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 			Amount: params.TransferRuneAmount,
 			Output: recipientOutput,
 		})
+
+		recipientAddressFeeElement, err = NewEstimationElementFromStringAddress(params.RunesRecipientAddress, 0, 1, b.networkParams)
+		if err != nil {
+			return result, err
+		}
 	}
 	if numbers.IsPositive(params.BurnRuneAmount) {
 		runestone.Edicts = append(runestone.Edicts, runes.Edict{
@@ -412,26 +421,22 @@ func (b *TxBuilder) buildBaseTransferRuneTx(params BaseRunesTransferParams) (res
 			InputsNumber:    len(runeUTXOs),
 			OutputsNumber:   runesSenderOutputs,
 		}},
-		ExtraExpenses: big.NewInt(int64(len(runestoneData))), // INFO: Runestone output size.
+		ExtraExpenses: big.NewInt(int64(utils.CompactSize(runestoneData) + outputAmountSize)), // INFO: Runestone output size.
+	}
+
+	if recipientAddressFeeElement != nil {
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, recipientAddressFeeElement) // INFO: Runes recipient extra output.
 	}
 
 	// commission output.
 	if params.SatoshiCommissionAmount != nil && numbers.IsPositive(params.SatoshiCommissionAmount) {
-		commissionAddress, err := btcutil.DecodeAddress(params.CommissionRecipientAddress, b.networkParams)
-		if err != nil {
-			return result, err
-		}
-
-		commissionAddressDataFees, err := NewDefaultPaymentDataFees(commissionAddress)
+		commissionAddressFeeElement, err := NewEstimationElementFromStringAddress(params.CommissionRecipientAddress, 0, 1, b.networkParams)
 		if err != nil {
 			return result, err
 		}
 
 		satTransferAmount.Add(satTransferAmount, params.SatoshiCommissionAmount)
-		txSizeEstimation.Elements = append(txSizeEstimation.Elements, &EstimationElement{ // INFO: Commission extra output.
-			PaymentDataFees: commissionAddressDataFees,
-			OutputsNumber:   1,
-		})
+		txSizeEstimation.Elements = append(txSizeEstimation.Elements, commissionAddressFeeElement) // INFO: Commission extra output.
 	}
 
 	prepareUTXOsResult, err := (&PrepareUTXOsParams{
@@ -1246,7 +1251,7 @@ func (b *TxBuilder) buildRuneEtchTx(params BaseRuneEtchTxParams) (result BaseRun
 			PaymentDataFees: params.InscriptionReveal.FeesData,
 			InputsNumber:    1,
 		}, runesRecipientEstimationElement},
-		ExtraExpenses: big.NewInt(int64(len(runestoneData))), // INFO: Runestone preestimated size.
+		ExtraExpenses: big.NewInt(int64(utils.CompactSize(runestoneData) + outputAmountSize)), // INFO: Runestone preestimated size.
 	}
 
 	etchTransactionFee := CalculateTxFee(etchTransactionFeeEstimation.Estimate(), params.SatoshiPerKVByte)
