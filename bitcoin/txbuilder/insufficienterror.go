@@ -8,8 +8,10 @@ import (
 	"math/big"
 )
 
+// BalanceErrorType defines currency specification type for balance errors.
 type BalanceErrorType string
 
+// CauserSign defines causer specification type for balances errors.
 type CauserSign string
 
 const (
