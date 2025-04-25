@@ -43,7 +43,7 @@ func NewDefaultPaymentDataFees(address btcutil.Address) (*PaymentDataFees, error
 	case *btcutil.AddressScriptHash:
 		inputSizeVByte, witnessSizeVBytes, outputSizeVBytes = 43, 254, 32
 	case *btcutil.AddressWitnessPubKeyHash:
-		inputSizeVByte, witnessSizeVBytes, outputSizeVBytes = 41, 36, 31
+		inputSizeVByte, witnessSizeVBytes, outputSizeVBytes = 41, 27, 31
 	case *btcutil.AddressWitnessScriptHash:
 		inputSizeVByte, witnessSizeVBytes, outputSizeVBytes = 41, 64, 43
 	case *btcutil.AddressTaproot:
